@@ -1,0 +1,2 @@
+# Epic-Fight-Doppelganger
+プレイヤータイプのエピックファイトのボスです
