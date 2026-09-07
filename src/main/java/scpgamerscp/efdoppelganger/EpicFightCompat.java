@@ -23,10 +23,10 @@ public final class EpicFightCompat {
     public static void onAttributes(EntityAttributeModificationEvent event) {
         EntityType<? extends LivingEntity> type = ModEntities.YOURSELF.get();
         event.add(type, EpicFightAttributes.WEIGHT.get());
-        event.add(type, EpicFightAttributes.ARMOR_NEGATION.get());
-        event.add(type, EpicFightAttributes.IMPACT.get());
+        event.add(type, EpicFightAttributes.ARMOR_NEGATION.get(), 10.0D);
+        event.add(type, EpicFightAttributes.IMPACT.get(), 2.4D);
         event.add(type, EpicFightAttributes.MAX_STRIKES.get());
-        event.add(type, EpicFightAttributes.STUN_ARMOR.get());
+        event.add(type, EpicFightAttributes.STUN_ARMOR.get(), 24.0D);
         event.add(type, EpicFightAttributes.OFFHAND_ATTACK_SPEED.get());
         event.add(type, EpicFightAttributes.OFFHAND_MAX_STRIKES.get());
         event.add(type, EpicFightAttributes.OFFHAND_ARMOR_NEGATION.get());

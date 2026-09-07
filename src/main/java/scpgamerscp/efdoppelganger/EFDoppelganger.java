@@ -32,7 +32,6 @@ public class EFDoppelganger {
         ModLootModifiers.SERIALIZERS.register(modBus);
 
         modBus.addListener(this::commonSetup);
-        MinecraftForge.EVENT_BUS.register(ModEvents.class);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {

@@ -12,6 +12,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import scpgamerscp.efdoppelganger.EFDoppelganger;
 import scpgamerscp.efdoppelganger.config.DoppelConfig;
 import scpgamerscp.efdoppelganger.entity.YourselfEntity;
 import scpgamerscp.efdoppelganger.entity.YourselfPatch;
@@ -19,6 +21,7 @@ import scpgamerscp.efdoppelganger.item.ModItems;
 import scpgamerscp.efdoppelganger.registry.ModEntities;
 import yesman.epicfight.world.capabilities.EpicFightCapabilities;
 
+@Mod.EventBusSubscriber(modid = EFDoppelganger.MOD_ID)
 public final class ModEvents {
     private static final int POISON_II = 1;
 

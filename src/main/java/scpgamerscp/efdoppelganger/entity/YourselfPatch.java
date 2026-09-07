@@ -4,6 +4,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.item.ProjectileWeaponItem;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import scpgamerscp.efdoppelganger.config.DoppelConfig;
 import yesman.epicfight.api.animation.Animator;
 import yesman.epicfight.api.animation.LivingMotions;
@@ -27,8 +28,8 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
     }
 
     @Override
-    public void onConstructed(YourselfEntity entity) {
-        super.onConstructed(entity);
+    public void onJoinWorld(YourselfEntity entity, EntityJoinLevelEvent event) {
+        super.onJoinWorld(entity, event);
         AttributeInstance stun = entity.getAttribute(EpicFightAttributes.STUN_ARMOR.get());
         if (stun != null) {
             stun.setBaseValue(DoppelConfig.STUN_ARMOR.get());
