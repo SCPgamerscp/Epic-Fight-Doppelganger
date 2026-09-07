@@ -355,7 +355,7 @@ public class YourselfEntity extends Monster {
             if (food != null) {
                 food.getEffects().forEach(pair -> {
                     if (this.random.nextFloat() < pair.getSecond()) {
-                        this.addEffect(pair.getFirst());
+                        this.addEffect(new MobEffectInstance(pair.getFirst()));
                     }
                 });
             }

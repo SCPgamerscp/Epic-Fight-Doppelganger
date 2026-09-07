@@ -28,9 +28,6 @@ public class VillagerMeatItem extends Item {
 
     @Override
     public ItemStack finishUsingItem(ItemStack stack, Level level, LivingEntity entity) {
-        if (!level.isClientSide && entity instanceof Player player) {
-            ModEvents.summonYourself(player);
-        }
         return super.finishUsingItem(stack, level, entity);
     }
 
