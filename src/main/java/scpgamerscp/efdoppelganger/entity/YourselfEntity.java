@@ -126,6 +126,10 @@ public class YourselfEntity extends Monster {
             this.rememberedWeapons.add(held.copy());
             this.setItemSlot(EquipmentSlot.MAINHAND, held.copy());
         }
+        ItemStack offhand = player.getOffhandItem();
+        if (!offhand.isEmpty()) {
+            this.setItemSlot(EquipmentSlot.OFFHAND, offhand.copy());
+        }
         if (memory != null) {
             for (ItemStack stack : memory.weapons()) {
                 if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
@@ -182,6 +186,16 @@ public class YourselfEntity extends Monster {
         super.tick();
         if (this.level().isClientSide) {
             return;
+        }
+        if (this.lockedPlayer == null || this.getOwnerUUID() == null) {
+            Player nearest = this.level().getNearestPlayer(this, 64.0D);
+            if (nearest != null) {
+                this.copyFrom(nearest);
+                YourselfPatch patch = EpicFightCapabilities.getEntityPatch(this, YourselfPatch.class);
+                if (patch != null) {
+                    patch.rebuildCombatAi();
+                }
+            }
         }
         this.bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
         int phase = this.getPhase();

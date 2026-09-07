@@ -1,6 +1,5 @@
 package scpgamerscp.efdoppelganger.client;
 
-import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
@@ -32,17 +31,17 @@ public class YourselfRenderer extends LivingEntityRenderer<YourselfEntity, Playe
     @Override
     public ResourceLocation getTextureLocation(YourselfEntity entity) {
         UUID uuid = entity.getOwnerUUID();
-        String name = entity.getOwnerName();
         if (uuid == null) {
             return DefaultPlayerSkin.getDefaultSkin();
         }
-        GameProfile profile = new GameProfile(uuid, name == null || name.isBlank() ? "Steve" : name);
-        try {
-            Minecraft.getInstance().getSkinManager().registerSkins(profile, (type, location, texture) -> {}, true);
-            return Minecraft.getInstance().getSkinManager().getInsecureSkinLocation(profile);
-        } catch (Exception e) {
-            return DefaultPlayerSkin.getDefaultSkin(uuid);
+        var connection = Minecraft.getInstance().getConnection();
+        if (connection != null) {
+            var playerInfo = connection.getPlayerInfo(uuid);
+            if (playerInfo != null) {
+                return playerInfo.getSkinLocation();
+            }
         }
+        return DefaultPlayerSkin.getDefaultSkin(uuid);
     }
 
     @Override
