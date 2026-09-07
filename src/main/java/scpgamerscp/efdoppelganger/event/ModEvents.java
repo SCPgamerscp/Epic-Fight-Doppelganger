@@ -37,22 +37,11 @@ public final class ModEvents {
             int[] ticksRemaining
     ) {}
 
-    @SubscribeEvent
-    public static void onEaten(LivingEntityUseItemEvent.Finish event) {
-        if (!(event.getEntity() instanceof Player player) || player.level().isClientSide) {
-            return;
-        }
-        ItemStack stack = event.getItem();
-        if (!stack.is(ModItems.VILLAGER_MEAT.get())) {
-            return;
-        }
-        scheduleSummon(player);
-    }
-
     public static void scheduleSummon(Player player) {
         if (!(player.level() instanceof ServerLevel level)) {
             return;
         }
+        EFDoppelganger.LOGGER.info("Villager meat consumed by {}, scheduling Yourself summon in 5 seconds.", player.getGameProfile().getName());
         // プレイヤーの視線前方 2.5 ブロックの位置を出現位置とする
         double yawRad = Math.toRadians(player.getYRot());
         double spawnX = player.getX() - Math.sin(yawRad) * 2.5;
