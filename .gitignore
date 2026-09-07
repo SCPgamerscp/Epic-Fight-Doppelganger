@@ -1,0 +1,11 @@
+build/
+run/
+run-data/
+.gradle/
+.idea/
+*.iml
+eclipse/
+out/
+bin/
+src/generated/
+.DS_Store

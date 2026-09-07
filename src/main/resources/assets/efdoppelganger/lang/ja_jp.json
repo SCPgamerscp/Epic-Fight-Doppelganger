@@ -1,0 +1,9 @@
+{
+  "itemGroup.efdoppelganger": "Epic Fight Doppelganger",
+  "entity.efdoppelganger.yourself": "あなた自身",
+  "item.efdoppelganger.villager_meat": "村人の肉",
+  "item.efdoppelganger.villager_meat.desc": "食べるな。",
+  "item.efdoppelganger.mirror_elixir": "鏡映の霊薬",
+  "item.efdoppelganger.mirror_elixir.desc": "耐性IVと再生IVが100分続く。",
+  "item.efdoppelganger.yourself_spawn_egg": "あなた自身のスポーンエッグ"
+}

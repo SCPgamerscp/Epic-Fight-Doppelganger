@@ -1,0 +1,8 @@
+{
+  "type": "efdoppelganger:villager_meat",
+  "conditions": [
+    {
+      "condition": "minecraft:killed_by_player"
+    }
+  ]
+}
