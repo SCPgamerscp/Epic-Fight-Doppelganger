@@ -55,6 +55,9 @@ public class YourselfEntity extends Monster {
     private UUID lockedPlayer;
     private int weaponSwitchTicks;
     private int healCooldown;
+    private int eatingTicks;
+    private ItemStack eatingItem = ItemStack.EMPTY;
+    private ItemStack savedOffhandItem = ItemStack.EMPTY;
     private int lastPhase;
     private final List<ItemStack> rememberedWeapons = new ArrayList<>();
     private final List<ItemStack> rememberedHeals = new ArrayList<>();
@@ -96,6 +99,26 @@ public class YourselfEntity extends Monster {
         this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Monster.class, true, (living) -> living != this));
     }
 
+    public static boolean isWeaponItem(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return false;
+        }
+        if (stack.getItem() instanceof net.minecraft.world.item.TieredItem) {
+            return true;
+        }
+        if (stack.getItem() instanceof net.minecraft.world.item.ProjectileWeaponItem) {
+            return true;
+        }
+        if (stack.getItem() instanceof net.minecraft.world.item.TridentItem) {
+            return true;
+        }
+        var cap = yesman.epicfight.world.capabilities.EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
+        if (cap instanceof yesman.epicfight.world.capabilities.item.WeaponCapability) {
+            return true;
+        }
+        return stack.getAttributeModifiers(EquipmentSlot.MAINHAND).containsKey(Attributes.ATTACK_DAMAGE);
+    }
+
     public void copyFrom(Player player) {
         this.entityData.set(OWNER_UUID, player.getUUID().toString());
         this.entityData.set(OWNER_NAME, player.getGameProfile().getName());
@@ -120,16 +143,47 @@ public class YourselfEntity extends Monster {
             }
         }
 
-        WeaponMemory memory = WeaponMemoryEvents.get(player);
-        ItemStack held = player.getMainHandItem();
-        if (!held.isEmpty()) {
-            this.rememberedWeapons.add(held.copy());
-            this.setItemSlot(EquipmentSlot.MAINHAND, held.copy());
+        // プレイヤーのインベントリ全体から武器と回復アイテムを網羅的に走査
+        for (ItemStack stack : player.getInventory().items) {
+            if (stack.isEmpty()) continue;
+            if (isWeaponItem(stack)) {
+                if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
+                    this.rememberedWeapons.add(stack.copy());
+                }
+            } else if (WeaponMemoryEvents.isHealingItem(stack)) {
+                if (this.rememberedHeals.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
+                    this.rememberedHeals.add(stack.copy());
+                }
+            }
         }
+
+        // プレイヤーのメインハンドとオフハンドのコピー
+        ItemStack held = player.getMainHandItem();
+        if (isWeaponItem(held)) {
+            if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, held))) {
+                this.rememberedWeapons.add(0, held.copy());
+            }
+            this.setItemSlot(EquipmentSlot.MAINHAND, held.copy());
+        } else if (!this.rememberedWeapons.isEmpty()) {
+            // メインハンドが武器でない場合（肉や空手など）、記憶した武器の先頭を構える
+            this.setItemSlot(EquipmentSlot.MAINHAND, this.rememberedWeapons.get(0).copy());
+        }
+
         ItemStack offhand = player.getOffhandItem();
         if (!offhand.isEmpty()) {
             this.setItemSlot(EquipmentSlot.OFFHAND, offhand.copy());
+            if (isWeaponItem(offhand)) {
+                if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, offhand))) {
+                    this.rememberedWeapons.add(offhand.copy());
+                }
+            } else if (WeaponMemoryEvents.isHealingItem(offhand)) {
+                if (this.rememberedHeals.stream().noneMatch(s -> ItemStack.isSameItem(s, offhand))) {
+                    this.rememberedHeals.add(offhand.copy());
+                }
+            }
         }
+
+        WeaponMemory memory = WeaponMemoryEvents.get(player);
         if (memory != null) {
             for (ItemStack stack : memory.weapons()) {
                 if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
@@ -137,11 +191,19 @@ public class YourselfEntity extends Monster {
                 }
             }
             for (ItemStack stack : memory.heals()) {
-                this.rememberedHeals.add(stack.copy());
+                if (this.rememberedHeals.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
+                    this.rememberedHeals.add(stack.copy());
+                }
             }
             this.rememberedSkills.addAll(memory.skills());
             WeaponMemoryEvents.snapshotSkills(player, memory);
         }
+
+        // 回復アイテムが何もない場合のフォールバック（金リンゴ）
+        if (this.rememberedHeals.isEmpty()) {
+            this.rememberedHeals.add(new ItemStack(Items.GOLDEN_APPLE));
+        }
+
         this.xpReward = DoppelConfig.XP_REWARD.get();
         this.applyPhaseEffects(1);
     }
@@ -203,18 +265,40 @@ public class YourselfEntity extends Monster {
             this.lastPhase = phase;
             this.applyPhaseEffects(phase);
         }
+
+        // 飲食演出の進行
+        if (this.eatingTicks > 0) {
+            this.eatingTicks--;
+            if (this.eatingTicks % 4 == 0) {
+                this.playSound(SoundEvents.GENERIC_EAT, 0.8F, 0.9F + this.random.nextFloat() * 0.2F);
+                if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel && !this.eatingItem.isEmpty()) {
+                    serverLevel.sendParticles(
+                            new net.minecraft.core.particles.ItemParticleOption(net.minecraft.core.particles.ParticleTypes.ITEM, this.eatingItem),
+                            this.getX(), this.getEyeY() - 0.1, this.getZ(),
+                            5, 0.1, 0.1, 0.1, 0.05);
+                }
+            }
+            if (this.eatingTicks == 0) {
+                this.finishEating();
+            }
+        }
+
+        // 武器の定期的な切り替え（3〜4秒 = 60〜80 ticks）
         if (this.weaponSwitchTicks > 0) {
             this.weaponSwitchTicks--;
         } else {
             this.switchWeapon();
-            this.weaponSwitchTicks = Math.max(40, DoppelConfig.WEAPON_SWITCH_INTERVAL_TICKS.get() - (phase - 1) * 20);
+            this.weaponSwitchTicks = 60 + this.random.nextInt(20);
         }
+
+        // 回復アイテムの使用判定（HP50%以下 & クールダウン完了 & 飲食中でない）
         if (this.healCooldown > 0) {
             this.healCooldown--;
-        } else if (!this.rememberedHeals.isEmpty()
+        } else if (this.eatingTicks <= 0 && !this.rememberedHeals.isEmpty()
                 && this.getHealth() / this.getMaxHealth() * 100.0F <= DoppelConfig.HEAL_BELOW_PERCENT.get()) {
-            this.useRememberedHeal();
+            this.startEating();
         }
+
         if (this.lockedPlayer != null) {
             Player locked = this.level().getPlayerByUUID(this.lockedPlayer);
             LivingEntity target = this.getTarget();
@@ -232,24 +316,42 @@ public class YourselfEntity extends Monster {
     }
 
     private void switchWeapon() {
-        if (this.rememberedWeapons.isEmpty()) {
+        if (this.rememberedWeapons.size() <= 1 && this.rememberedWeapons.isEmpty()) {
             return;
         }
-        ItemStack next = this.rememberedWeapons.get(this.random.nextInt(this.rememberedWeapons.size()));
+        ItemStack current = this.getMainHandItem();
+        List<ItemStack> candidates = this.rememberedWeapons.stream()
+                .filter(s -> !ItemStack.isSameItem(s, current))
+                .toList();
+        ItemStack next = candidates.isEmpty()
+                ? this.rememberedWeapons.get(0)
+                : candidates.get(this.random.nextInt(candidates.size()));
+
         this.setItemSlot(EquipmentSlot.MAINHAND, next.copy());
+        this.playSound(SoundEvents.ARMOR_EQUIP_IRON, 1.0F, 1.0F);
+
         YourselfPatch patch = EpicFightCapabilities.getEntityPatch(this, YourselfPatch.class);
         if (patch != null) {
             patch.rebuildCombatAi();
         }
     }
 
-    private void useRememberedHeal() {
-        ItemStack heal = this.rememberedHeals.get(this.random.nextInt(this.rememberedHeals.size()));
-        this.heal(Math.max(8.0F, this.getMaxHealth() * 0.12F));
-        this.healCooldown = 200;
-        this.playSound(SoundEvents.GENERIC_EAT, 1.0F, 1.0F);
-        if (heal.getItem().isEdible()) {
-            var food = heal.getItem().getFoodProperties(heal, this);
+    private void startEating() {
+        if (this.rememberedHeals.isEmpty()) {
+            return;
+        }
+        this.eatingItem = this.rememberedHeals.get(this.random.nextInt(this.rememberedHeals.size())).copy();
+        this.savedOffhandItem = this.getItemBySlot(EquipmentSlot.OFFHAND).copy();
+        this.setItemSlot(EquipmentSlot.OFFHAND, this.eatingItem.copy());
+        this.eatingTicks = 25; // 1.25秒間モグモグ食べる
+        this.healCooldown = 220; // 次の回復まで11秒
+    }
+
+    private void finishEating() {
+        this.heal(Math.max(12.0F, this.getMaxHealth() * 0.15F));
+        this.playSound(SoundEvents.PLAYER_BURP, 0.9F, 1.0F);
+        if (this.eatingItem.getItem().isEdible()) {
+            var food = this.eatingItem.getItem().getFoodProperties(this.eatingItem, this);
             if (food != null) {
                 food.getEffects().forEach(pair -> {
                     if (this.random.nextFloat() < pair.getSecond()) {
@@ -258,6 +360,9 @@ public class YourselfEntity extends Monster {
                 });
             }
         }
+        // オフハンドを元のアイテムに戻す
+        this.setItemSlot(EquipmentSlot.OFFHAND, this.savedOffhandItem.copy());
+        this.eatingItem = ItemStack.EMPTY;
     }
 
     @Override
