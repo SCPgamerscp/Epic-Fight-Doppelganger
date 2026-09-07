@@ -1,0 +1,9 @@
+{
+  "itemGroup.efdoppelganger": "Epic Fight Doppelganger",
+  "entity.efdoppelganger.yourself": "yourself",
+  "item.efdoppelganger.villager_meat": "Villager Meat",
+  "item.efdoppelganger.villager_meat.desc": "Do not eat.",
+  "item.efdoppelganger.mirror_elixir": "Mirror Elixir",
+  "item.efdoppelganger.mirror_elixir.desc": "Resistance IV and Regeneration IV for 100 minutes.",
+  "item.efdoppelganger.yourself_spawn_egg": "yourself Spawn Egg"
+}
