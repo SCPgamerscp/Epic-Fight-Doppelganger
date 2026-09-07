@@ -41,7 +41,7 @@ public final class WeaponMemoryEvents {
             if (cap == null) {
                 return;
             }
-            cap.getSkillContainers().forEach(container -> {
+            cap.listSkillContainers().forEach(container -> {
                 if (container != null && container.getSkill() != null) {
                     memory.rememberSkill(String.valueOf(container.getSkill()));
                 }

@@ -12,7 +12,7 @@ public final class ModLootModifiers {
             DeferredRegister.create(ForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, EFDoppelganger.MOD_ID);
 
     public static final RegistryObject<Codec<? extends IGlobalLootModifier>> VILLAGER_MEAT =
-            SERIALIZERS.register("villager_meat", () -> VillagerMeatModifier.CODEC);
+            SERIALIZERS.register("villager_meat", VillagerMeatModifier.CODEC);
 
     private ModLootModifiers() {}
 }
