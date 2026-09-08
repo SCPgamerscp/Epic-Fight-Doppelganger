@@ -33,8 +33,8 @@ public final class DoppelConfig {
                 .defineInRange("stunArmor", 24.0, 0.0, 200.0);
         XP_REWARD = b.comment("Experience dropped on death. 12000 matches the Ender Dragon.")
                 .defineInRange("xpReward", 12000, 0, 100000);
-        WEAPON_SWITCH_INTERVAL_TICKS = b.comment("How often the boss may switch to another remembered weapon.")
-                .defineInRange("weaponSwitchIntervalTicks", 120, 20, 1200);
+        WEAPON_SWITCH_INTERVAL_TICKS = b.comment("How often the boss may switch to another remembered weapon (ticks, 20 ticks = 1s, 400 ticks = 20s).")
+                .defineInRange("weaponSwitchIntervalTicks", 400, 20, 72000);
         HEAL_BELOW_PERCENT = b.comment("Boss uses a remembered healing item when health falls below this percent.")
                 .defineInRange("healBelowPercent", 40, 1, 99);
         MAX_HEAL_COUNT = b.comment("Maximum times the boss can heal with items during combat. 0 disables healing.")

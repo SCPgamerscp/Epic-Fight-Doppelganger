@@ -95,7 +95,7 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             return buildFallbackBehaviors(mainhand);
         }
 
-        // 1. アドオン武器等の動的取得（独自コンボ & 独自スキル）
+        // 1. アドオン武器（WOM等）の動的取得（ダッシュ・独自コンボ・特殊技/アルティメット技）
         CombatBehaviors.Builder<HumanoidMobPatch<?>> dynamicBuilder = tryBuildDynamicAddonBehaviors(cap, mainhand, entity);
         if (dynamicBuilder != null) {
             return dynamicBuilder;
@@ -163,25 +163,31 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             }
         } catch (Throwable ignored) {}
 
+        // アドオン（WOM等）の特殊技（左右クリック技、アルティメット技、ダッシュ技）の動的抽出
+        List<AnimationAccessor<? extends AttackAnimation>> addonDashAnims = new ArrayList<>();
+        List<AnimationAccessor<? extends AttackAnimation>> addonSpecialAnims = new ArrayList<>();
+        extractWomWeaponAnimations(mainhand, addonDashAnims, addonSpecialAnims);
+
+        AnimationAccessor<? extends AttackAnimation> dashAnim = !addonDashAnims.isEmpty() ? addonDashAnims.get(0) : getCategoryDashAnimation(cap.getWeaponCategory());
+        List<AnimationAccessor<? extends AttackAnimation>> finishers = new ArrayList<>(skillAnims);
+        finishers.addAll(addonSpecialAnims);
+        if (finishers.isEmpty()) {
+            finishers.addAll(getCategorySkillAnimations(cap.getWeaponCategory()));
+        }
+
         int phase = entity.getPhase();
-        int skillCooldown = (phase == 3) ? 70 : (phase == 2 ? 110 : 150);
+        int surpriseCooldown = (phase == 3) ? 50 : (phase == 2 ? 80 : 120);
 
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
         double reach = Math.max(2.6D, weaponCap.getReach());
 
-        // スキルが動的取得できた場合、必殺技シリーズを先頭に登録
-        if (!skillAnims.isEmpty()) {
-            builder.newBehaviorSeries(createSkillSeries(skillAnims, reach + 1.5D, skillCooldown));
-        } else {
-            // スキルが動的取得できなかった場合はカテゴリ別スキルで補填
-            List<AnimationAccessor<? extends AttackAnimation>> catSkill = getCategorySkillAnimations(cap.getWeaponCategory());
-            if (!catSkill.isEmpty()) {
-                builder.newBehaviorSeries(createSkillSeries(catSkill, reach + 1.5D, skillCooldown));
-            }
+        // 1. 中距離からの単発強襲必殺技シリーズ
+        if (!finishers.isEmpty()) {
+            builder.newBehaviorSeries(createSurpriseSkillSeries(finishers, reach, surpriseCooldown));
         }
 
-        // アドオン独自のプレイヤーコンボ攻撃シリーズを登録
-        builder.newBehaviorSeries(createComboSeries(comboAnims, reach));
+        // 2. 「ダッシュ急接近 → 通常連撃 → 締め特殊必殺技」の流れるようなフルコンボ（隙0.5秒）
+        builder.newBehaviorSeries(createFullComboSeries(dashAnim, comboAnims, finishers, reach));
 
         return builder;
     }
@@ -190,38 +196,88 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             CapabilityItem cap, ItemStack mainhand, YourselfEntity entity) {
         WeaponCategory cat = cap.getWeaponCategory();
         int phase = entity.getPhase();
-        int skillCooldown = (phase == 3) ? 70 : (phase == 2 ? 110 : 150);
+        int surpriseCooldown = (phase == 3) ? 50 : (phase == 2 ? 80 : 120);
 
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
 
         if (cat == CapabilityItem.WeaponCategories.TACHI || cat == CapabilityItem.WeaponCategories.UCHIGATANA) {
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.BATTOJUTSU), 5.5D, skillCooldown));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.TACHI_AUTO1, Animations.TACHI_AUTO2, Animations.TACHI_AUTO3), 3.2D));
+            // 太刀: 抜刀ダッシュ急襲、および ダッシュ→通常3連→抜刀術フルコンボ
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.BATTOJUTSU_DASH), 3.2D, surpriseCooldown));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.TACHI_DASH,
+                    List.of(Animations.TACHI_AUTO1, Animations.TACHI_AUTO2, Animations.TACHI_AUTO3),
+                    List.of(Animations.BATTOJUTSU),
+                    3.2D));
         } else if (cat == CapabilityItem.WeaponCategories.GREATSWORD) {
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.STEEL_WHIRLWIND), 4.5D, skillCooldown));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.GREATSWORD_AUTO1, Animations.GREATSWORD_AUTO2), 3.4D));
+            // 大剣: 薙ぎ払い急襲、および ダッシュ→重撃2連→旋風撃フルコンボ
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.STEEL_WHIRLWIND), 3.4D, surpriseCooldown));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.GREATSWORD_DASH,
+                    List.of(Animations.GREATSWORD_AUTO1, Animations.GREATSWORD_AUTO2),
+                    List.of(Animations.STEEL_WHIRLWIND),
+                    3.4D));
         } else if (cat == CapabilityItem.WeaponCategories.LONGSWORD) {
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.RUSHING_TEMPO1, Animations.RUSHING_TEMPO2), 4.8D, skillCooldown));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.LONGSWORD_AUTO1, Animations.LONGSWORD_AUTO2, Animations.LONGSWORD_AUTO3), 3.0D));
+            // ロングソード: ラッシング急襲、および ダッシュ→通常3連→ラッシングテンポ2連突きフルコンボ
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.RUSHING_TEMPO1), 3.0D, surpriseCooldown));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.LONGSWORD_DASH,
+                    List.of(Animations.LONGSWORD_AUTO1, Animations.LONGSWORD_AUTO2, Animations.LONGSWORD_AUTO3),
+                    List.of(Animations.RUSHING_TEMPO1, Animations.RUSHING_TEMPO2),
+                    3.0D));
         } else if (cat == CapabilityItem.WeaponCategories.DAGGER) {
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.EVISCERATE_FIRST, Animations.EVISCERATE_SECOND), 3.5D, skillCooldown));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.DAGGER_AUTO1, Animations.DAGGER_AUTO2, Animations.DAGGER_AUTO3), 2.2D));
+            // 短剣: 連刃急襲、および ダッシュ→通常3連→裂傷連撃フルコンボ
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.BLADE_RUSH_COMBO1), 2.2D, surpriseCooldown));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.DAGGER_DASH,
+                    List.of(Animations.DAGGER_AUTO1, Animations.DAGGER_AUTO2, Animations.DAGGER_AUTO3),
+                    List.of(Animations.EVISCERATE_FIRST, Animations.EVISCERATE_SECOND),
+                    2.2D));
         } else if (cat == CapabilityItem.WeaponCategories.AXE) {
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.THE_GUILLOTINE), 4.0D, skillCooldown));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2), 2.6D));
+            // 斧: ギロチン強襲、および ダッシュ→通常2連→断頭台叩きつけフルコンボ
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.THE_GUILLOTINE), 2.6D, surpriseCooldown));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.SWORD_DASH,
+                    List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2),
+                    List.of(Animations.THE_GUILLOTINE),
+                    2.6D));
         } else if (cat == CapabilityItem.WeaponCategories.SPEAR) {
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.WRATHFUL_LIGHTING), 5.5D, skillCooldown));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.SPEAR_TWOHAND_AUTO1, Animations.SPEAR_TWOHAND_AUTO2), 3.6D));
+            // 槍: ハートピアサー強襲、および ダッシュ→両手2連→雷撃突きフルコンボ
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.HEARTPIERCER), 3.6D, surpriseCooldown));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.SPEAR_DASH,
+                    List.of(Animations.SPEAR_TWOHAND_AUTO1, Animations.SPEAR_TWOHAND_AUTO2),
+                    List.of(Animations.WRATHFUL_LIGHTING),
+                    3.6D));
         } else {
-            // SWORD 及び通常片手武器
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.RUSHING_TEMPO1, Animations.RUSHING_TEMPO2, Animations.RUSHING_TEMPO3), 4.5D, skillCooldown));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2, Animations.SWORD_AUTO3), 2.6D));
+            // 片手剣 / 通常武器: ダッシュ→通常3連→円舞/薙ぎ払いフルコンボ
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.SWEEPING_EDGE), 2.6D, surpriseCooldown));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.SWORD_DASH,
+                    List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2, Animations.SWORD_AUTO3),
+                    List.of(Animations.DANCING_EDGE),
+                    2.6D));
         }
 
         return builder;
     }
 
-    private List<AnimationAccessor<? extends AttackAnimation>> getCategorySkillAnimations(WeaponCategory cat) {
+    private static AnimationAccessor<? extends AttackAnimation> getCategoryDashAnimation(WeaponCategory cat) {
+        if (cat == CapabilityItem.WeaponCategories.TACHI || cat == CapabilityItem.WeaponCategories.UCHIGATANA) {
+            return Animations.TACHI_DASH;
+        } else if (cat == CapabilityItem.WeaponCategories.GREATSWORD) {
+            return Animations.GREATSWORD_DASH;
+        } else if (cat == CapabilityItem.WeaponCategories.LONGSWORD) {
+            return Animations.LONGSWORD_DASH;
+        } else if (cat == CapabilityItem.WeaponCategories.DAGGER) {
+            return Animations.DAGGER_DASH;
+        } else if (cat == CapabilityItem.WeaponCategories.SPEAR) {
+            return Animations.SPEAR_DASH;
+        } else {
+            return Animations.SWORD_DASH;
+        }
+    }
+
+    private static List<AnimationAccessor<? extends AttackAnimation>> getCategorySkillAnimations(WeaponCategory cat) {
         if (cat == CapabilityItem.WeaponCategories.TACHI || cat == CapabilityItem.WeaponCategories.UCHIGATANA) {
             return List.of(Animations.BATTOJUTSU);
         } else if (cat == CapabilityItem.WeaponCategories.GREATSWORD) {
@@ -235,58 +291,137 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
         } else if (cat == CapabilityItem.WeaponCategories.SPEAR) {
             return List.of(Animations.WRATHFUL_LIGHTING);
         } else {
-            return List.of(Animations.RUSHING_TEMPO1, Animations.RUSHING_TEMPO2);
+            return List.of(Animations.DANCING_EDGE);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void extractWomWeaponAnimations(
+            ItemStack stack,
+            List<AnimationAccessor<? extends AttackAnimation>> dashOut,
+            List<AnimationAccessor<? extends AttackAnimation>> specialOut) {
+        try {
+            net.minecraft.resources.ResourceLocation id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
+            if (id == null || !id.getNamespace().equals("wom")) {
+                return;
+            }
+            String path = id.getPath().toLowerCase();
+            String simpleName = path.replaceAll("[^a-z0-9]", "");
+            String capitalized = Character.toUpperCase(simpleName.charAt(0)) + simpleName.substring(1);
+            String className = "reascer.wom.gameasset.animations.weapons.Anims" + capitalized;
+
+            Class<?> animClass = null;
+            try {
+                animClass = Class.forName(className);
+            } catch (ClassNotFoundException ignored) {
+                try {
+                    animClass = Class.forName("reascer.wom.gameasset.WOMAnimations");
+                } catch (ClassNotFoundException e) {
+                    return;
+                }
+            }
+
+            for (Field field : animClass.getDeclaredFields()) {
+                if (AnimationAccessor.class.isAssignableFrom(field.getType())) {
+                    field.setAccessible(true);
+                    Object val = field.get(null);
+                    if (val instanceof AnimationAccessor<?> acc) {
+                        String name = field.getName().toUpperCase();
+                        if (name.contains("DASH")) {
+                            dashOut.add((AnimationAccessor<? extends AttackAnimation>) acc);
+                        } else if (name.contains("SPECIAL") || name.contains("ULTIMATE") || name.contains("RELEASE")
+                                || name.contains("COUNTER") || name.contains("SLASH") || name.contains("EXECUTE")) {
+                            specialOut.add((AnimationAccessor<? extends AttackAnimation>) acc);
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 
     private CombatBehaviors.Builder<HumanoidMobPatch<?>> buildFistBehaviors() {
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
-        builder.newBehaviorSeries(createComboSeries(List.of(Animations.FIST_AUTO1, Animations.FIST_AUTO2, Animations.FIST_AUTO3), 2.0D));
+        builder.newBehaviorSeries(createFullComboSeries(
+                null,
+                List.of(Animations.FIST_AUTO1, Animations.FIST_AUTO2, Animations.FIST_AUTO3),
+                List.of(),
+                2.0D));
         return builder;
     }
 
     private CombatBehaviors.Builder<HumanoidMobPatch<?>> buildFallbackBehaviors(ItemStack stack) {
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
         if (stack.getItem() instanceof net.minecraft.world.item.AxeItem) {
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.THE_GUILLOTINE), 4.0D, 120));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2), 2.6D));
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.THE_GUILLOTINE), 2.6D, 100));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.SWORD_DASH,
+                    List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2),
+                    List.of(Animations.THE_GUILLOTINE),
+                    2.6D));
         } else {
-            builder.newBehaviorSeries(createSkillSeries(List.of(Animations.RUSHING_TEMPO1, Animations.RUSHING_TEMPO2), 4.5D, 120));
-            builder.newBehaviorSeries(createComboSeries(List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2, Animations.SWORD_AUTO3), 2.6D));
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.SWEEPING_EDGE), 2.6D, 100));
+            builder.newBehaviorSeries(createFullComboSeries(
+                    Animations.SWORD_DASH,
+                    List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2, Animations.SWORD_AUTO3),
+                    List.of(Animations.DANCING_EDGE),
+                    2.6D));
         }
         return builder;
     }
 
-    private CombatBehaviors.BehaviorSeries.Builder<HumanoidMobPatch<?>> createComboSeries(
-            List<? extends AnimationAccessor<? extends AttackAnimation>> animations,
+    private CombatBehaviors.BehaviorSeries.Builder<HumanoidMobPatch<?>> createFullComboSeries(
+            AnimationAccessor<? extends AttackAnimation> dashAnim,
+            List<? extends AnimationAccessor<? extends AttackAnimation>> autoAnims,
+            List<? extends AnimationAccessor<? extends AttackAnimation>> finishers,
             double reach) {
         CombatBehaviors.BehaviorSeries.Builder<HumanoidMobPatch<?>> series = CombatBehaviors.BehaviorSeries.builder();
-        series.weight(100.0F);
+        series.weight(160.0F);
         series.canBeInterrupted(true);
         series.looping(false);
-        series.cooldown(10);
-        for (AnimationAccessor<? extends AttackAnimation> anim : animations) {
+        series.cooldown(10); // コンボ終了後の隙: 0.5秒（10 ticks）
+
+        // 1. ダッシュ攻撃で急接近（中距離 1.2D 〜 reach + 2.5D）
+        if (dashAnim != null) {
+            series.nextBehavior(CombatBehaviors.Behavior.<HumanoidMobPatch<?>>builder()
+                    .animationBehavior(dashAnim)
+                    .withinDistance(1.2D, reach + 2.5D));
+        }
+
+        // 2. 通常コンボ（至近距離 0.0D 〜 reach）
+        for (AnimationAccessor<? extends AttackAnimation> anim : autoAnims) {
             series.nextBehavior(CombatBehaviors.Behavior.<HumanoidMobPatch<?>>builder()
                     .animationBehavior(anim)
                     .withinDistance(0.0D, reach));
         }
+
+        // 3. 締めのフィニッシャー・特殊技（0.0D 〜 reach + 1.5D）
+        if (finishers != null && !finishers.isEmpty()) {
+            for (AnimationAccessor<? extends AttackAnimation> finisher : finishers) {
+                series.nextBehavior(CombatBehaviors.Behavior.<HumanoidMobPatch<?>>builder()
+                        .animationBehavior(finisher)
+                        .withinDistance(0.0D, reach + 1.5D));
+            }
+        }
+
         return series;
     }
 
-    private CombatBehaviors.BehaviorSeries.Builder<HumanoidMobPatch<?>> createSkillSeries(
-            List<? extends AnimationAccessor<? extends AttackAnimation>> animations,
+    private CombatBehaviors.BehaviorSeries.Builder<HumanoidMobPatch<?>> createSurpriseSkillSeries(
+            List<? extends AnimationAccessor<? extends AttackAnimation>> skills,
             double reach,
             int cooldownTicks) {
         CombatBehaviors.BehaviorSeries.Builder<HumanoidMobPatch<?>> series = CombatBehaviors.BehaviorSeries.builder();
-        series.weight(250.0F);
+        series.weight(220.0F);
         series.canBeInterrupted(false);
         series.looping(false);
         series.cooldown(cooldownTicks);
-        for (AnimationAccessor<? extends AttackAnimation> anim : animations) {
+
+        for (AnimationAccessor<? extends AttackAnimation> anim : skills) {
             series.nextBehavior(CombatBehaviors.Behavior.<HumanoidMobPatch<?>>builder()
                     .animationBehavior(anim)
-                    .withinDistance(0.0D, reach));
+                    .withinDistance(1.8D, reach + 2.5D));
         }
+
         return series;
     }
 

@@ -1,5 +1,7 @@
 package scpgamerscp.efdoppelganger.entity;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
@@ -31,6 +33,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import scpgamerscp.efdoppelganger.config.DoppelConfig;
 import scpgamerscp.efdoppelganger.item.ModItems;
 import scpgamerscp.efdoppelganger.memory.WeaponMemory;
@@ -68,6 +71,7 @@ public class YourselfEntity extends Monster {
         super(type, level);
         this.xpReward = DoppelConfig.XP_REWARD.get();
         this.remainingHealCount = DoppelConfig.MAX_HEAL_COUNT.get();
+        this.weaponSwitchTicks = DoppelConfig.WEAPON_SWITCH_INTERVAL_TICKS.get();
         this.setCustomName(Component.translatable("entity.efdoppelganger.yourself"));
         this.setCustomNameVisible(true);
     }
@@ -288,12 +292,12 @@ public class YourselfEntity extends Monster {
             }
         }
 
-        // 武器の定期的な切り替え（3〜4秒 = 60〜80 ticks）
+        // 武器の定期的な切り替え（デフォルト20秒 = 400 ticks）
         if (this.weaponSwitchTicks > 0) {
             this.weaponSwitchTicks--;
         } else {
             this.switchWeapon();
-            this.weaponSwitchTicks = 60 + this.random.nextInt(20);
+            this.weaponSwitchTicks = DoppelConfig.WEAPON_SWITCH_INTERVAL_TICKS.get();
         }
 
         // 回復アイテムの使用判定（HP条件以下 & 回数残あり & クールダウン完了 & 飲食中でない）
@@ -313,6 +317,60 @@ public class YourselfEntity extends Monster {
                 }
             }
         }
+
+        // ターゲットから20ブロック以上離れた場合の即時テレポート（クールダウンなし）
+        LivingEntity currentTarget = this.getTarget();
+        if (currentTarget != null && currentTarget.isAlive()) {
+            double distSq = this.distanceToSqr(currentTarget);
+            if (distSq >= 400.0D) {
+                this.teleportToTarget(currentTarget);
+            }
+        }
+    }
+
+    private void teleportToTarget(LivingEntity target) {
+        if (this.level().isClientSide || target == null) {
+            return;
+        }
+        // ターゲットの背後約2.5ブロックの位置を基準にする
+        Vec3 look = target.getLookAngle();
+        double targetX = target.getX() - look.x * 2.5D;
+        double targetY = target.getY();
+        double targetZ = target.getZ() - look.z * 2.5D;
+
+        BlockPos targetPos = BlockPos.containing(targetX, targetY, targetZ);
+        boolean foundSafePos = false;
+        for (int dy = 2; dy >= -3; dy--) {
+            BlockPos checkPos = targetPos.above(dy);
+            if (this.level().getBlockState(checkPos.below()).isSolidRender(this.level(), checkPos.below())
+                    && !this.level().getBlockState(checkPos).isSolidRender(this.level(), checkPos)
+                    && !this.level().getBlockState(checkPos.above()).isSolidRender(this.level(), checkPos.above())) {
+                targetX = checkPos.getX() + 0.5D;
+                targetY = checkPos.getY();
+                targetZ = checkPos.getZ() + 0.5D;
+                foundSafePos = true;
+                break;
+            }
+        }
+        if (!foundSafePos) {
+            targetX = target.getX();
+            targetY = target.getY();
+            targetZ = target.getZ();
+        }
+
+        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            serverLevel.sendParticles(ParticleTypes.PORTAL, this.getX(), this.getY() + 1.0D, this.getZ(), 35, 0.5D, 0.8D, 0.5D, 0.1D);
+            this.playSound(SoundEvents.ENDERMAN_TELEPORT, 1.0F, 1.0F);
+
+            this.teleportTo(targetX, targetY, targetZ);
+
+            serverLevel.sendParticles(ParticleTypes.PORTAL, targetX, targetY + 1.0D, targetZ, 35, 0.5D, 0.8D, 0.5D, 0.1D);
+            this.playSound(SoundEvents.ENDERMAN_TELEPORT, 1.0F, 1.0F);
+        } else {
+            this.teleportTo(targetX, targetY, targetZ);
+        }
+
+        this.lookAt(target, 360.0F, 360.0F);
     }
 
     private void applyPhaseEffects(int phase) {
