@@ -1,5 +1,6 @@
 package scpgamerscp.efdoppelganger.entity;
 
+import com.google.common.collect.Maps;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
@@ -39,6 +40,21 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
 
     public YourselfPatch(YourselfEntity entity) {
         super(Factions.NEUTRAL);
+    }
+
+    @Override
+    protected void setWeaponMotions() {
+        // 親クラス HumanoidMobPatch のモブ用アニメーション (BIPED_MOB_*) を完全遮断し、常に空にする
+        this.weaponLivingMotions = Maps.newHashMap();
+        this.weaponAttackMotions = Maps.newHashMap();
+    }
+
+    @Override
+    public void updateHeldItem(CapabilityItem fromCap, CapabilityItem toCap, ItemStack from, ItemStack to, InteractionHand hand) {
+        super.updateHeldItem(fromCap, toCap, from, to, hand);
+        if (hand == InteractionHand.MAIN_HAND && this.original != null) {
+            this.rebuildCombatAi();
+        }
     }
 
     @Override
@@ -82,7 +98,7 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
     protected CombatBehaviors.Builder<HumanoidMobPatch<?>> getHoldingItemWeaponMotionBuilder() {
         YourselfEntity entity = this.getOriginal();
         if (entity == null) {
-            return MobCombatBehaviors.HUMANOID_FIST;
+            return buildFistBehaviors();
         }
 
         ItemStack mainhand = entity.getMainHandItem();
@@ -95,14 +111,34 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             return buildFallbackBehaviors(mainhand);
         }
 
-        // 1. アドオン武器（WOM等）の動的取得（ダッシュ・独自コンボ・特殊技/アルティメット技）
+        WeaponCategory cat = cap.getWeaponCategory();
+        net.minecraft.resources.ResourceLocation id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(mainhand.getItem());
+        boolean isStandardMod = id == null || id.getNamespace().equals("minecraft") || id.getNamespace().equals("epicfight");
+
+        // 標準武器種（剣、短剣、太刀、大剣、ロングソード、槍、斧）かつバニラ/EpicFight標準武器は、最優先で完全なプレイヤーモーションを適用
+        if (isStandardMod && isStandardWeaponCategory(cat)) {
+            return buildCategoryBehaviors(cap, mainhand, entity);
+        }
+
+        // アドオン武器（WOM等）の動的取得（ダッシュ・独自コンボ・特殊技/アルティメット技）
         CombatBehaviors.Builder<HumanoidMobPatch<?>> dynamicBuilder = tryBuildDynamicAddonBehaviors(cap, mainhand, entity);
         if (dynamicBuilder != null) {
             return dynamicBuilder;
         }
 
-        // 2. 武器カテゴリ別のプレイヤーコンボ & 必殺技（フォールバック）
+        // 動的取得できなかった場合のカテゴリ別プレイヤーコンボ
         return buildCategoryBehaviors(cap, mainhand, entity);
+    }
+
+    private static boolean isStandardWeaponCategory(WeaponCategory cat) {
+        return cat == CapabilityItem.WeaponCategories.SWORD
+                || cat == CapabilityItem.WeaponCategories.DAGGER
+                || cat == CapabilityItem.WeaponCategories.TACHI
+                || cat == CapabilityItem.WeaponCategories.UCHIGATANA
+                || cat == CapabilityItem.WeaponCategories.GREATSWORD
+                || cat == CapabilityItem.WeaponCategories.LONGSWORD
+                || cat == CapabilityItem.WeaponCategories.SPEAR
+                || cat == CapabilityItem.WeaponCategories.AXE;
     }
 
     @SuppressWarnings("unchecked")
@@ -120,8 +156,20 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             if (map != null && !map.isEmpty()) {
                 for (Object value : map.values()) {
                     if (value instanceof List<?> list && !list.isEmpty()) {
-                        comboAnims = (List<AnimationAccessor<? extends AttackAnimation>>) list;
-                        break;
+                        List<AnimationAccessor<? extends AttackAnimation>> filtered = new ArrayList<>();
+                        for (Object o : list) {
+                            if (o instanceof AnimationAccessor<?> acc) {
+                                String name = acc.toString().toUpperCase();
+                                // 空中攻撃や騎乗攻撃、ダッシュ攻撃を地上通常コンボから除外
+                                if (!name.contains("AIR") && !name.contains("MOUNT") && !name.contains("DASH")) {
+                                    filtered.add((AnimationAccessor<? extends AttackAnimation>) acc);
+                                }
+                            }
+                        }
+                        if (!filtered.isEmpty()) {
+                            comboAnims = filtered;
+                            break;
+                        }
                     }
                 }
             }
@@ -198,6 +246,13 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
         int phase = entity.getPhase();
         int surpriseCooldown = (phase == 3) ? 20 : (phase == 2 ? 30 : 45);
 
+        ItemStack offhand = entity.getOffhandItem();
+        CapabilityItem offCap = EpicFightCapabilities.getItemStackCapabilityOr(offhand, null);
+        boolean isDualDagger = (cat == CapabilityItem.WeaponCategories.DAGGER)
+                && offCap != null && offCap.getWeaponCategory() == CapabilityItem.WeaponCategories.DAGGER;
+        boolean isDualSword = (cat == CapabilityItem.WeaponCategories.SWORD)
+                && offCap != null && offCap.getWeaponCategory() == CapabilityItem.WeaponCategories.SWORD;
+
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
 
         if (cat == CapabilityItem.WeaponCategories.TACHI || cat == CapabilityItem.WeaponCategories.UCHIGATANA) {
@@ -225,13 +280,23 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
                     List.of(Animations.RUSHING_TEMPO1, Animations.RUSHING_TEMPO2),
                     3.0D));
         } else if (cat == CapabilityItem.WeaponCategories.DAGGER) {
-            // 短剣: 連刃急襲、および ダッシュ→通常3連→裂傷連撃フルコンボ
+            // 短剣: 連刃急襲、および ダッシュ→通常連撃→裂傷連撃フルコンボ
             builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.BLADE_RUSH_COMBO1), 2.2D, surpriseCooldown));
-            builder.newBehaviorSeries(createFullComboSeries(
-                    Animations.DAGGER_DASH,
-                    List.of(Animations.DAGGER_AUTO1, Animations.DAGGER_AUTO2, Animations.DAGGER_AUTO3),
-                    List.of(Animations.EVISCERATE_FIRST, Animations.EVISCERATE_SECOND),
-                    2.2D));
+            if (isDualDagger) {
+                // 二刀流短剣: プレイヤー正規二刀流4連撃
+                builder.newBehaviorSeries(createFullComboSeries(
+                        Animations.DAGGER_DUAL_DASH,
+                        List.of(Animations.DAGGER_DUAL_AUTO1, Animations.DAGGER_DUAL_AUTO2, Animations.DAGGER_DUAL_AUTO3, Animations.DAGGER_DUAL_AUTO4),
+                        List.of(Animations.EVISCERATE_FIRST, Animations.EVISCERATE_SECOND),
+                        2.2D));
+            } else {
+                // 片手短剣: プレイヤー正規片手3連撃
+                builder.newBehaviorSeries(createFullComboSeries(
+                        Animations.DAGGER_DASH,
+                        List.of(Animations.DAGGER_AUTO1, Animations.DAGGER_AUTO2, Animations.DAGGER_AUTO3),
+                        List.of(Animations.EVISCERATE_FIRST, Animations.EVISCERATE_SECOND),
+                        2.2D));
+            }
         } else if (cat == CapabilityItem.WeaponCategories.AXE) {
             // 斧: ギロチン強襲、および ダッシュ→通常2連→断頭台叩きつけフルコンボ
             builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.THE_GUILLOTINE), 2.6D, surpriseCooldown));
@@ -249,13 +314,23 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
                     List.of(Animations.WRATHFUL_LIGHTING),
                     3.6D));
         } else {
-            // 片手剣 / 通常武器: ダッシュ→通常3連→円舞/薙ぎ払いフルコンボ
+            // 片手剣 / 通常武器: ダッシュ→通常3連(二刀流なら二刀3連)→円舞/薙ぎ払いフルコンボ
             builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.SWEEPING_EDGE), 2.6D, surpriseCooldown));
-            builder.newBehaviorSeries(createFullComboSeries(
-                    Animations.SWORD_DASH,
-                    List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2, Animations.SWORD_AUTO3),
-                    List.of(Animations.DANCING_EDGE),
-                    2.6D));
+            if (isDualSword) {
+                // 二刀流片手剣: プレイヤー正規二刀流3連撃
+                builder.newBehaviorSeries(createFullComboSeries(
+                        Animations.SWORD_DUAL_DASH,
+                        List.of(Animations.SWORD_DUAL_AUTO1, Animations.SWORD_DUAL_AUTO2, Animations.SWORD_DUAL_AUTO3),
+                        List.of(Animations.DANCING_EDGE),
+                        2.6D));
+            } else {
+                // 片手剣: プレイヤー正規片手3連撃
+                builder.newBehaviorSeries(createFullComboSeries(
+                        Animations.SWORD_DASH,
+                        List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2, Animations.SWORD_AUTO3),
+                        List.of(Animations.DANCING_EDGE),
+                        2.6D));
+            }
         }
 
         return builder;
