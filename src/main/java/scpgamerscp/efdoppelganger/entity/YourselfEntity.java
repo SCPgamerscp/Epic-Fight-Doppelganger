@@ -56,6 +56,7 @@ public class YourselfEntity extends Monster {
     private int weaponSwitchTicks;
     private int healCooldown;
     private int eatingTicks;
+    private int remainingHealCount = -1;
     private ItemStack eatingItem = ItemStack.EMPTY;
     private ItemStack savedOffhandItem = ItemStack.EMPTY;
     private int lastPhase;
@@ -66,6 +67,7 @@ public class YourselfEntity extends Monster {
     public YourselfEntity(EntityType<? extends Monster> type, Level level) {
         super(type, level);
         this.xpReward = DoppelConfig.XP_REWARD.get();
+        this.remainingHealCount = DoppelConfig.MAX_HEAL_COUNT.get();
         this.setCustomName(Component.translatable("entity.efdoppelganger.yourself"));
         this.setCustomNameVisible(true);
     }
@@ -204,6 +206,9 @@ public class YourselfEntity extends Monster {
             this.rememberedHeals.add(new ItemStack(Items.GOLDEN_APPLE));
         }
 
+        if (this.remainingHealCount < 0) {
+            this.remainingHealCount = DoppelConfig.MAX_HEAL_COUNT.get();
+        }
         this.xpReward = DoppelConfig.XP_REWARD.get();
         this.applyPhaseEffects(1);
     }
@@ -291,10 +296,10 @@ public class YourselfEntity extends Monster {
             this.weaponSwitchTicks = 60 + this.random.nextInt(20);
         }
 
-        // 回復アイテムの使用判定（HP50%以下 & クールダウン完了 & 飲食中でない）
+        // 回復アイテムの使用判定（HP条件以下 & 回数残あり & クールダウン完了 & 飲食中でない）
         if (this.healCooldown > 0) {
             this.healCooldown--;
-        } else if (this.eatingTicks <= 0 && !this.rememberedHeals.isEmpty()
+        } else if (this.eatingTicks <= 0 && this.remainingHealCount > 0 && !this.rememberedHeals.isEmpty()
                 && this.getHealth() / this.getMaxHealth() * 100.0F <= DoppelConfig.HEAL_BELOW_PERCENT.get()) {
             this.startEating();
         }
@@ -344,12 +349,16 @@ public class YourselfEntity extends Monster {
         this.savedOffhandItem = this.getItemBySlot(EquipmentSlot.OFFHAND).copy();
         this.setItemSlot(EquipmentSlot.OFFHAND, this.eatingItem.copy());
         this.eatingTicks = 25; // 1.25秒間モグモグ食べる
-        this.healCooldown = 220; // 次の回復まで11秒
+        this.healCooldown = DoppelConfig.HEAL_COOLDOWN_TICKS.get();
     }
 
     private void finishEating() {
-        this.heal(Math.max(12.0F, this.getMaxHealth() * 0.15F));
+        float percent = DoppelConfig.HEAL_AMOUNT_PERCENT.get() / 100.0F;
+        this.heal(Math.max(12.0F, this.getMaxHealth() * percent));
         this.playSound(SoundEvents.PLAYER_BURP, 0.9F, 1.0F);
+        if (this.remainingHealCount > 0) {
+            this.remainingHealCount--;
+        }
         if (this.eatingItem.getItem().isEdible()) {
             var food = this.eatingItem.getItem().getFoodProperties(this.eatingItem, this);
             if (food != null) {
@@ -399,6 +408,7 @@ public class YourselfEntity extends Monster {
         if (this.lockedPlayer != null) {
             tag.putUUID("LockedPlayer", this.lockedPlayer);
         }
+        tag.putInt("RemainingHealCount", this.remainingHealCount);
         tag.put("Weapons", writeList(this.rememberedWeapons));
         tag.put("Heals", writeList(this.rememberedHeals));
         tag.putInt("SkillsCount", this.rememberedSkills.size());
@@ -414,6 +424,11 @@ public class YourselfEntity extends Monster {
         this.entityData.set(OWNER_NAME, tag.getString("OwnerName"));
         if (tag.hasUUID("LockedPlayer")) {
             this.lockedPlayer = tag.getUUID("LockedPlayer");
+        }
+        if (tag.contains("RemainingHealCount")) {
+            this.remainingHealCount = tag.getInt("RemainingHealCount");
+        } else {
+            this.remainingHealCount = DoppelConfig.MAX_HEAL_COUNT.get();
         }
         this.rememberedWeapons.clear();
         this.rememberedHeals.clear();

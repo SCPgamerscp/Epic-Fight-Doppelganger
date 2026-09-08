@@ -15,6 +15,9 @@ public final class DoppelConfig {
     public static final ForgeConfigSpec.IntValue ELIXIRS;
     public static final ForgeConfigSpec.IntValue WEAPON_SWITCH_INTERVAL_TICKS;
     public static final ForgeConfigSpec.IntValue HEAL_BELOW_PERCENT;
+    public static final ForgeConfigSpec.IntValue MAX_HEAL_COUNT;
+    public static final ForgeConfigSpec.IntValue HEAL_COOLDOWN_TICKS;
+    public static final ForgeConfigSpec.IntValue HEAL_AMOUNT_PERCENT;
     public static final ForgeConfigSpec.BooleanValue COPY_ARMOR;
 
     static {
@@ -34,6 +37,12 @@ public final class DoppelConfig {
                 .defineInRange("weaponSwitchIntervalTicks", 120, 20, 1200);
         HEAL_BELOW_PERCENT = b.comment("Boss uses a remembered healing item when health falls below this percent.")
                 .defineInRange("healBelowPercent", 40, 1, 99);
+        MAX_HEAL_COUNT = b.comment("Maximum times the boss can heal with items during combat. 0 disables healing.")
+                .defineInRange("maxHealCount", 64, 0, Integer.MAX_VALUE);
+        HEAL_COOLDOWN_TICKS = b.comment("Cooldown ticks between healing item uses.")
+                .defineInRange("healCooldownTicks", 220, 0, Integer.MAX_VALUE);
+        HEAL_AMOUNT_PERCENT = b.comment("Percent of max health restored per healing item use.")
+                .defineInRange("healAmountPercent", 15, 1, 100);
         COPY_ARMOR = b.comment("Copy the target player's armor on spawn.").define("copyArmor", true);
         b.pop();
 
