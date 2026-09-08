@@ -9,6 +9,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import scpgamerscp.efdoppelganger.config.DoppelConfig;
+import scpgamerscp.efdoppelganger.util.AnimationSanitizer;
 import yesman.epicfight.api.animation.AnimationManager.AnimationAccessor;
 import yesman.epicfight.api.animation.Animator;
 import yesman.epicfight.api.animation.LivingMotions;
@@ -223,6 +224,14 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             finishers.addAll(getCategorySkillAnimations(cap.getWeaponCategory()));
         }
 
+        // アドオンMOD（WOM等）のPlayerキャストによるClassCastExceptionクラッシュを全アニメーションで完全防止
+        AnimationSanitizer.sanitizeAccessors(comboAnims);
+        AnimationSanitizer.sanitizeAccessors(skillAnims);
+        AnimationSanitizer.sanitizeAccessors(addonDashAnims);
+        AnimationSanitizer.sanitizeAccessors(addonSpecialAnims);
+        AnimationSanitizer.sanitizeAccessor(dashAnim);
+        AnimationSanitizer.sanitizeAccessors(finishers);
+
         int phase = entity.getPhase();
         int surpriseCooldown = (phase == 3) ? 20 : (phase == 2 ? 30 : 45);
 
@@ -401,6 +410,7 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
                     field.setAccessible(true);
                     Object val = field.get(null);
                     if (val instanceof AnimationAccessor<?> acc) {
+                        AnimationSanitizer.sanitizeAccessor(acc);
                         String name = field.getName().toUpperCase();
                         if (name.contains("DASH")) {
                             dashOut.add((AnimationAccessor<? extends AttackAnimation>) acc);
@@ -411,6 +421,19 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
                     }
                 }
             }
+
+            try {
+                Class<?> globalWom = Class.forName("reascer.wom.gameasset.WOMAnimations");
+                for (Field field : globalWom.getDeclaredFields()) {
+                    if (AnimationAccessor.class.isAssignableFrom(field.getType())) {
+                        field.setAccessible(true);
+                        Object val = field.get(null);
+                        if (val instanceof AnimationAccessor<?> acc) {
+                            AnimationSanitizer.sanitizeAccessor(acc);
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
         } catch (Throwable ignored) {}
     }
 
