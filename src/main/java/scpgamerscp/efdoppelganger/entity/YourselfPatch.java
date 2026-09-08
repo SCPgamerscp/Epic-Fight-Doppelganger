@@ -176,7 +176,7 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
         }
 
         int phase = entity.getPhase();
-        int surpriseCooldown = (phase == 3) ? 50 : (phase == 2 ? 80 : 120);
+        int surpriseCooldown = (phase == 3) ? 20 : (phase == 2 ? 30 : 45);
 
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
         double reach = Math.max(2.6D, weaponCap.getReach());
@@ -186,7 +186,7 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             builder.newBehaviorSeries(createSurpriseSkillSeries(finishers, reach, surpriseCooldown));
         }
 
-        // 2. 「ダッシュ急接近 → 通常連撃 → 締め特殊必殺技」の流れるようなフルコンボ（隙0.5秒）
+        // 2. 「ダッシュ急接近 → 通常連撃 → 締め特殊必殺技」の流れるようなフルコンボ（隙ゼロ・完走保証）
         builder.newBehaviorSeries(createFullComboSeries(dashAnim, comboAnims, finishers, reach));
 
         return builder;
@@ -196,7 +196,7 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             CapabilityItem cap, ItemStack mainhand, YourselfEntity entity) {
         WeaponCategory cat = cap.getWeaponCategory();
         int phase = entity.getPhase();
-        int surpriseCooldown = (phase == 3) ? 50 : (phase == 2 ? 80 : 120);
+        int surpriseCooldown = (phase == 3) ? 20 : (phase == 2 ? 30 : 45);
 
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
 
@@ -352,14 +352,14 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
     private CombatBehaviors.Builder<HumanoidMobPatch<?>> buildFallbackBehaviors(ItemStack stack) {
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
         if (stack.getItem() instanceof net.minecraft.world.item.AxeItem) {
-            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.THE_GUILLOTINE), 2.6D, 100));
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.THE_GUILLOTINE), 2.6D, 30));
             builder.newBehaviorSeries(createFullComboSeries(
                     Animations.SWORD_DASH,
                     List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2),
                     List.of(Animations.THE_GUILLOTINE),
                     2.6D));
         } else {
-            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.SWEEPING_EDGE), 2.6D, 100));
+            builder.newBehaviorSeries(createSurpriseSkillSeries(List.of(Animations.SWEEPING_EDGE), 2.6D, 30));
             builder.newBehaviorSeries(createFullComboSeries(
                     Animations.SWORD_DASH,
                     List.of(Animations.SWORD_AUTO1, Animations.SWORD_AUTO2, Animations.SWORD_AUTO3),
@@ -376,30 +376,32 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
             double reach) {
         CombatBehaviors.BehaviorSeries.Builder<HumanoidMobPatch<?>> series = CombatBehaviors.BehaviorSeries.builder();
         series.weight(160.0F);
-        series.canBeInterrupted(true);
+        series.canBeInterrupted(false); // コンボ完走保証（途切れ防止）
         series.looping(false);
-        series.cooldown(10); // コンボ終了後の隙: 0.5秒（10 ticks）
+        series.cooldown(0); // コンボ終了後の隙（クールダウン）完全撤廃
 
-        // 1. ダッシュ攻撃で急接近（中距離 1.2D 〜 reach + 2.5D）
+        // 1. ダッシュ攻撃（届く距離 1.8D 〜 reach + 3.0D でのみ飛び込み発動。届かない遠距離では走って詰める）
         if (dashAnim != null) {
             series.nextBehavior(CombatBehaviors.Behavior.<HumanoidMobPatch<?>>builder()
                     .animationBehavior(dashAnim)
-                    .withinDistance(1.2D, reach + 2.5D));
+                    .withinDistance(1.8D, reach + 3.0D));
         }
 
-        // 2. 通常コンボ（至近距離 0.0D 〜 reach）
+        // 2. 通常コンボ（プレイヤーがバックステップしても途切れないよう範囲を広げて確実に完走）
+        double comboReach = Math.max(reach + 2.0D, 4.8D);
         for (AnimationAccessor<? extends AttackAnimation> anim : autoAnims) {
             series.nextBehavior(CombatBehaviors.Behavior.<HumanoidMobPatch<?>>builder()
                     .animationBehavior(anim)
-                    .withinDistance(0.0D, reach));
+                    .withinDistance(0.0D, comboReach));
         }
 
-        // 3. 締めのフィニッシャー・特殊技（0.0D 〜 reach + 1.5D）
+        // 3. 締めのフィニッシャー・特殊技（確実に大技を叩き込む）
         if (finishers != null && !finishers.isEmpty()) {
+            double finisherReach = Math.max(reach + 2.5D, 5.2D);
             for (AnimationAccessor<? extends AttackAnimation> finisher : finishers) {
                 series.nextBehavior(CombatBehaviors.Behavior.<HumanoidMobPatch<?>>builder()
                         .animationBehavior(finisher)
-                        .withinDistance(0.0D, reach + 1.5D));
+                        .withinDistance(0.0D, finisherReach));
             }
         }
 
@@ -419,7 +421,7 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
         for (AnimationAccessor<? extends AttackAnimation> anim : skills) {
             series.nextBehavior(CombatBehaviors.Behavior.<HumanoidMobPatch<?>>builder()
                     .animationBehavior(anim)
-                    .withinDistance(1.8D, reach + 2.5D));
+                    .withinDistance(2.0D, reach + 3.0D));
         }
 
         return series;

@@ -79,7 +79,7 @@ public class YourselfEntity extends Monster {
     public static AttributeSupplier.Builder createAttributes() {
         return Monster.createMonsterAttributes()
                 .add(Attributes.MAX_HEALTH, 500.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.28D)
+                .add(Attributes.MOVEMENT_SPEED, 0.38D)
                 .add(Attributes.ATTACK_DAMAGE, 8.0D)
                 .add(Attributes.FOLLOW_RANGE, 48.0D)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 0.85D)
@@ -318,13 +318,16 @@ public class YourselfEntity extends Monster {
             }
         }
 
-        // ターゲットから20ブロック以上離れた場合の即時テレポート（クールダウンなし）
+        // ターゲットから20ブロック以上離れた場合の即時テレポート（クールダウンなし）＆スプリント猛ダッシュ
         LivingEntity currentTarget = this.getTarget();
         if (currentTarget != null && currentTarget.isAlive()) {
+            this.setSprinting(true);
             double distSq = this.distanceToSqr(currentTarget);
             if (distSq >= 400.0D) {
                 this.teleportToTarget(currentTarget);
             }
+        } else {
+            this.setSprinting(false);
         }
     }
 
