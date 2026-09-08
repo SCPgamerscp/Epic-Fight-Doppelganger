@@ -32,6 +32,9 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.PotionItem;
+import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.item.alchemy.PotionUtils;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import scpgamerscp.efdoppelganger.config.DoppelConfig;
@@ -279,7 +282,10 @@ public class YourselfEntity extends Monster {
         if (this.eatingTicks > 0) {
             this.eatingTicks--;
             if (this.eatingTicks % 4 == 0) {
-                this.playSound(SoundEvents.GENERIC_EAT, 0.8F, 0.9F + this.random.nextFloat() * 0.2F);
+                boolean isDrink = this.eatingItem.getItem() instanceof PotionItem
+                        || this.eatingItem.getUseAnimation() == UseAnim.DRINK;
+                SoundEvent sound = isDrink ? SoundEvents.GENERIC_DRINK : SoundEvents.GENERIC_EAT;
+                this.playSound(sound, 0.8F, 0.9F + this.random.nextFloat() * 0.2F);
                 if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel && !this.eatingItem.isEmpty()) {
                     serverLevel.sendParticles(
                             new net.minecraft.core.particles.ItemParticleOption(net.minecraft.core.particles.ParticleTypes.ITEM, this.eatingItem),
@@ -428,6 +434,15 @@ public class YourselfEntity extends Monster {
                         this.addEffect(new MobEffectInstance(pair.getFirst()));
                     }
                 });
+            }
+        }
+        // ポーション固有のエフェクト（即時回復・即時ダメージ・持続バフ/デバフ等、有害な効果も含む）
+        List<MobEffectInstance> potionEffects = PotionUtils.getMobEffects(this.eatingItem);
+        for (MobEffectInstance effect : potionEffects) {
+            if (effect.getEffect().isInstantenous()) {
+                effect.getEffect().applyInstantenousEffect(this, this, this, effect.getAmplifier(), 1.0D);
+            } else {
+                this.addEffect(new MobEffectInstance(effect));
             }
         }
         // オフハンドを元のアイテムに戻す

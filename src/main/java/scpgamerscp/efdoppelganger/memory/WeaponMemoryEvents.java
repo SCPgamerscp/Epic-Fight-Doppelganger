@@ -55,6 +55,9 @@ public final class WeaponMemoryEvents {
         if (stack.isEmpty()) {
             return false;
         }
+        if (stack.getItem() instanceof net.minecraft.world.item.ThrowablePotionItem) {
+            return false;
+        }
         if (stack.getItem().getFoodProperties(stack, null) != null) {
             return true;
         }
