@@ -7,6 +7,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ProjectileWeaponItem;
+import net.minecraft.world.item.SwordItem;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import scpgamerscp.efdoppelganger.config.DoppelConfig;
 import scpgamerscp.efdoppelganger.util.AnimationSanitizer;
@@ -53,7 +54,7 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
     @Override
     public void updateHeldItem(CapabilityItem fromCap, CapabilityItem toCap, ItemStack from, ItemStack to, InteractionHand hand) {
         super.updateHeldItem(fromCap, toCap, from, to, hand);
-        if (hand == InteractionHand.MAIN_HAND && this.original != null) {
+        if (this.original != null) {
             this.rebuildCombatAi();
         }
     }
@@ -259,8 +260,8 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
         CapabilityItem offCap = EpicFightCapabilities.getItemStackCapabilityOr(offhand, null);
         boolean isDualDagger = (cat == CapabilityItem.WeaponCategories.DAGGER)
                 && offCap != null && offCap.getWeaponCategory() == CapabilityItem.WeaponCategories.DAGGER;
-        boolean isDualSword = (cat == CapabilityItem.WeaponCategories.SWORD)
-                && offCap != null && offCap.getWeaponCategory() == CapabilityItem.WeaponCategories.SWORD;
+        boolean isDualSword = (cat == CapabilityItem.WeaponCategories.SWORD || mainhand.getItem() instanceof SwordItem)
+                && ((offCap != null && offCap.getWeaponCategory() == CapabilityItem.WeaponCategories.SWORD) || offhand.getItem() instanceof SwordItem);
 
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
 

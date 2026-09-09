@@ -33,6 +33,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.PotionItem;
+import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.item.alchemy.PotionUtils;
 import net.minecraft.world.level.Level;
@@ -42,6 +43,8 @@ import scpgamerscp.efdoppelganger.item.ModItems;
 import scpgamerscp.efdoppelganger.memory.WeaponMemory;
 import scpgamerscp.efdoppelganger.memory.WeaponMemoryEvents;
 import yesman.epicfight.world.capabilities.EpicFightCapabilities;
+import yesman.epicfight.world.capabilities.item.CapabilityItem;
+import yesman.epicfight.world.capabilities.item.WeaponCategory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -65,6 +68,9 @@ public class YourselfEntity extends Monster {
     private int remainingHealCount = -1;
     private ItemStack eatingItem = ItemStack.EMPTY;
     private ItemStack savedOffhandItem = ItemStack.EMPTY;
+    private ItemStack initialPlayerOffhand = ItemStack.EMPTY;
+    private boolean hasMultipleSwords = false;
+    private boolean hasMultipleDaggers = false;
     private int lastPhase;
     private final List<ItemStack> rememberedWeapons = new ArrayList<>();
     private final List<ItemStack> rememberedHeals = new ArrayList<>();
@@ -153,11 +159,20 @@ public class YourselfEntity extends Monster {
         }
 
         // プレイヤーのインベントリ全体から武器と回復アイテムを網羅的に走査
+        int swordCount = 0;
+        int daggerCount = 0;
         for (ItemStack stack : player.getInventory().items) {
             if (stack.isEmpty()) continue;
             if (isWeaponItem(stack)) {
                 if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
                     this.rememberedWeapons.add(stack.copy());
+                }
+                CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
+                WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+                if (cat == CapabilityItem.WeaponCategories.DAGGER) {
+                    daggerCount += stack.getCount();
+                } else if (cat == CapabilityItem.WeaponCategories.SWORD || stack.getItem() instanceof SwordItem) {
+                    swordCount += stack.getCount();
                 }
             } else if (WeaponMemoryEvents.isHealingItem(stack)) {
                 if (this.rememberedHeals.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
@@ -166,29 +181,37 @@ public class YourselfEntity extends Monster {
             }
         }
 
-        // プレイヤーのメインハンドとオフハンドのコピー
+        this.initialPlayerOffhand = player.getOffhandItem().copy();
+        if (!this.initialPlayerOffhand.isEmpty()) {
+            if (isWeaponItem(this.initialPlayerOffhand)) {
+                if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, this.initialPlayerOffhand))) {
+                    this.rememberedWeapons.add(this.initialPlayerOffhand.copy());
+                }
+                CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(this.initialPlayerOffhand, null);
+                WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+                if (cat == CapabilityItem.WeaponCategories.DAGGER) {
+                    daggerCount += this.initialPlayerOffhand.getCount();
+                } else if (cat == CapabilityItem.WeaponCategories.SWORD || this.initialPlayerOffhand.getItem() instanceof SwordItem) {
+                    swordCount += this.initialPlayerOffhand.getCount();
+                }
+            } else if (WeaponMemoryEvents.isHealingItem(this.initialPlayerOffhand)) {
+                if (this.rememberedHeals.stream().noneMatch(s -> ItemStack.isSameItem(s, this.initialPlayerOffhand))) {
+                    this.rememberedHeals.add(this.initialPlayerOffhand.copy());
+                }
+            }
+        }
+
         ItemStack held = player.getMainHandItem();
-        if (isWeaponItem(held)) {
+        if (!held.isEmpty() && isWeaponItem(held)) {
             if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, held))) {
                 this.rememberedWeapons.add(0, held.copy());
             }
-            this.setItemSlot(EquipmentSlot.MAINHAND, held.copy());
-        } else if (!this.rememberedWeapons.isEmpty()) {
-            // メインハンドが武器でない場合（肉や空手など）、記憶した武器の先頭を構える
-            this.setItemSlot(EquipmentSlot.MAINHAND, this.rememberedWeapons.get(0).copy());
-        }
-
-        ItemStack offhand = player.getOffhandItem();
-        if (!offhand.isEmpty()) {
-            this.setItemSlot(EquipmentSlot.OFFHAND, offhand.copy());
-            if (isWeaponItem(offhand)) {
-                if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, offhand))) {
-                    this.rememberedWeapons.add(offhand.copy());
-                }
-            } else if (WeaponMemoryEvents.isHealingItem(offhand)) {
-                if (this.rememberedHeals.stream().noneMatch(s -> ItemStack.isSameItem(s, offhand))) {
-                    this.rememberedHeals.add(offhand.copy());
-                }
+            CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(held, null);
+            WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+            if (cat == CapabilityItem.WeaponCategories.DAGGER) {
+                daggerCount += held.getCount();
+            } else if (cat == CapabilityItem.WeaponCategories.SWORD || held.getItem() instanceof SwordItem) {
+                swordCount += held.getCount();
             }
         }
 
@@ -198,6 +221,13 @@ public class YourselfEntity extends Monster {
                 if (this.rememberedWeapons.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
                     this.rememberedWeapons.add(stack.copy());
                 }
+                CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
+                WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+                if (cat == CapabilityItem.WeaponCategories.DAGGER) {
+                    daggerCount++;
+                } else if (cat == CapabilityItem.WeaponCategories.SWORD || stack.getItem() instanceof SwordItem) {
+                    swordCount++;
+                }
             }
             for (ItemStack stack : memory.heals()) {
                 if (this.rememberedHeals.stream().noneMatch(s -> ItemStack.isSameItem(s, stack))) {
@@ -206,6 +236,21 @@ public class YourselfEntity extends Monster {
             }
             this.rememberedSkills.addAll(memory.skills());
             WeaponMemoryEvents.snapshotSkills(player, memory);
+        }
+
+        this.hasMultipleSwords = swordCount >= 2;
+        this.hasMultipleDaggers = daggerCount >= 2;
+
+        // 初期メイン武器の決定と二刀流・オフハンド装備
+        ItemStack initialMain = (!held.isEmpty() && isWeaponItem(held))
+                ? held.copy()
+                : (!this.rememberedWeapons.isEmpty() ? this.rememberedWeapons.get(0).copy() : ItemStack.EMPTY);
+
+        if (!initialMain.isEmpty()) {
+            this.equipWeapon(initialMain);
+        } else {
+            this.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+            this.setItemSlot(EquipmentSlot.OFFHAND, this.initialPlayerOffhand.copy());
         }
 
         // 回復アイテムが何もない場合のフォールバック（金リンゴ）
@@ -301,7 +346,7 @@ public class YourselfEntity extends Monster {
         // 武器の定期的な切り替え（デフォルト20秒 = 400 ticks）
         if (this.weaponSwitchTicks > 0) {
             this.weaponSwitchTicks--;
-        } else {
+        } else if (this.eatingTicks <= 0) {
             this.switchWeapon();
             this.weaponSwitchTicks = DoppelConfig.WEAPON_SWITCH_INTERVAL_TICKS.get();
         }
@@ -387,8 +432,74 @@ public class YourselfEntity extends Monster {
         this.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 20 * 60 * 60, phase - 1, true, true));
     }
 
+    public void equipWeapon(ItemStack mainWeapon) {
+        this.setItemSlot(EquipmentSlot.MAINHAND, mainWeapon.copy());
+
+        ItemStack dualPartner = this.findDualWieldPartner(mainWeapon);
+        if (!dualPartner.isEmpty()) {
+            this.setItemSlot(EquipmentSlot.OFFHAND, dualPartner.copy());
+        } else {
+            this.setItemSlot(EquipmentSlot.OFFHAND, this.initialPlayerOffhand.copy());
+        }
+    }
+
+    private ItemStack findDualWieldPartner(ItemStack main) {
+        if (main.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+
+        CapabilityItem mainCap = EpicFightCapabilities.getItemStackCapabilityOr(main, null);
+        WeaponCategory mainCat = mainCap != null ? mainCap.getWeaponCategory() : null;
+        boolean isSword = (mainCat == CapabilityItem.WeaponCategories.SWORD) || (main.getItem() instanceof SwordItem);
+        boolean isDagger = (mainCat == CapabilityItem.WeaponCategories.DAGGER);
+
+        if (!isSword && !isDagger) {
+            return ItemStack.EMPTY;
+        }
+
+        // 1. rememberedWeapons から、main と異なる同カテゴリ武器を探索
+        List<ItemStack> candidates = new ArrayList<>();
+        for (ItemStack weapon : this.rememberedWeapons) {
+            if (weapon.isEmpty() || ItemStack.isSameItemSameTags(weapon, main)) {
+                continue;
+            }
+            CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(weapon, null);
+            WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+            if (isDagger && cat == CapabilityItem.WeaponCategories.DAGGER) {
+                candidates.add(weapon);
+            } else if (isSword && (cat == CapabilityItem.WeaponCategories.SWORD || weapon.getItem() instanceof SwordItem)) {
+                candidates.add(weapon);
+            }
+        }
+
+        if (!candidates.isEmpty()) {
+            return candidates.get(this.random.nextInt(candidates.size()));
+        }
+
+        // 2. プレイヤーの初期オフハンドが同カテゴリ武器であれば、それをパートナーとして採用
+        if (!this.initialPlayerOffhand.isEmpty()) {
+            CapabilityItem offCap = EpicFightCapabilities.getItemStackCapabilityOr(this.initialPlayerOffhand, null);
+            WeaponCategory offCat = offCap != null ? offCap.getWeaponCategory() : null;
+            if (isDagger && offCat == CapabilityItem.WeaponCategories.DAGGER) {
+                return this.initialPlayerOffhand;
+            } else if (isSword && (offCat == CapabilityItem.WeaponCategories.SWORD || this.initialPlayerOffhand.getItem() instanceof SwordItem)) {
+                return this.initialPlayerOffhand;
+            }
+        }
+
+        // 3. プレイヤーが同じ種類の武器を複数本所持していた場合、main をそのまま二刀流パートナーにする
+        if (isDagger && this.hasMultipleDaggers) {
+            return main;
+        }
+        if (isSword && this.hasMultipleSwords) {
+            return main;
+        }
+
+        return ItemStack.EMPTY;
+    }
+
     private void switchWeapon() {
-        if (this.rememberedWeapons.size() <= 1 && this.rememberedWeapons.isEmpty()) {
+        if (this.rememberedWeapons.isEmpty()) {
             return;
         }
         ItemStack current = this.getMainHandItem();
@@ -399,7 +510,7 @@ public class YourselfEntity extends Monster {
                 ? this.rememberedWeapons.get(0)
                 : candidates.get(this.random.nextInt(candidates.size()));
 
-        this.setItemSlot(EquipmentSlot.MAINHAND, next.copy());
+        this.equipWeapon(next);
         this.playSound(SoundEvents.ARMOR_EQUIP_IRON, 1.0F, 1.0F);
 
         YourselfPatch patch = EpicFightCapabilities.getEntityPatch(this, YourselfPatch.class);
@@ -491,6 +602,11 @@ public class YourselfEntity extends Monster {
         for (int i = 0; i < this.rememberedSkills.size(); i++) {
             tag.putString("Skill" + i, this.rememberedSkills.get(i));
         }
+        if (!this.initialPlayerOffhand.isEmpty()) {
+            tag.put("InitialPlayerOffhand", this.initialPlayerOffhand.save(new CompoundTag()));
+        }
+        tag.putBoolean("HasMultipleSwords", this.hasMultipleSwords);
+        tag.putBoolean("HasMultipleDaggers", this.hasMultipleDaggers);
     }
 
     @Override
@@ -515,6 +631,13 @@ public class YourselfEntity extends Monster {
         for (int i = 0; i < count; i++) {
             this.rememberedSkills.add(tag.getString("Skill" + i));
         }
+        if (tag.contains("InitialPlayerOffhand")) {
+            this.initialPlayerOffhand = ItemStack.of(tag.getCompound("InitialPlayerOffhand"));
+        } else {
+            this.initialPlayerOffhand = ItemStack.EMPTY;
+        }
+        this.hasMultipleSwords = tag.getBoolean("HasMultipleSwords");
+        this.hasMultipleDaggers = tag.getBoolean("HasMultipleDaggers");
         this.xpReward = DoppelConfig.XP_REWARD.get();
     }
 
