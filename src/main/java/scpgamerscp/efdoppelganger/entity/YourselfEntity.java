@@ -111,7 +111,6 @@ public class YourselfEntity extends Monster {
         this.goalSelector.addGoal(7, new RandomLookAroundGoal(this));
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
-        this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Monster.class, true, (living) -> living != this));
     }
 
     public static boolean isWeaponItem(ItemStack stack) {
