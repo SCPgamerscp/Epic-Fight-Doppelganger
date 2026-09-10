@@ -53,7 +53,11 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
 
     @Override
     public void updateHeldItem(CapabilityItem fromCap, CapabilityItem toCap, ItemStack from, ItemStack to, InteractionHand hand) {
-        super.updateHeldItem(fromCap, toCap, from, to, hand);
+        try {
+            super.updateHeldItem(fromCap, toCap, from, to, hand);
+        } catch (Throwable ignored) {
+            // Epic Fightのモブ用オフハンドアトリビュート重複例外 (Modifier is already applied on this attribute!) などを完全吸収
+        }
         if (this.original != null) {
             this.rebuildCombatAi();
         }
