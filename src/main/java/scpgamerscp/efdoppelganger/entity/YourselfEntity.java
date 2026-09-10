@@ -432,30 +432,68 @@ public class YourselfEntity extends Monster {
         this.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 20 * 60 * 60, phase - 1, true, true));
     }
 
+    public static boolean isDualWieldableWeapon(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return false;
+        }
+        CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
+        WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+        if (cat == CapabilityItem.WeaponCategories.SWORD || cat == CapabilityItem.WeaponCategories.DAGGER || cat == CapabilityItem.WeaponCategories.UCHIGATANA) {
+            return true;
+        }
+        if (cat == CapabilityItem.WeaponCategories.GREATSWORD || cat == CapabilityItem.WeaponCategories.TACHI
+                || cat == CapabilityItem.WeaponCategories.LONGSWORD || cat == CapabilityItem.WeaponCategories.SPEAR
+                || cat == CapabilityItem.WeaponCategories.AXE) {
+            return false;
+        }
+        if (stack.getItem() instanceof SwordItem) {
+            return true;
+        }
+        String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().toLowerCase();
+        if (name.contains("sword") || name.contains("dagger") || name.contains("blade") || name.contains("knife")) {
+            return !name.contains("great") && !name.contains("long") && !name.contains("heavy") && !name.contains("colossal");
+        }
+        return false;
+    }
+
+    public static boolean isDaggerType(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
+        WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+        if (cat == CapabilityItem.WeaponCategories.DAGGER) return true;
+        String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().toLowerCase();
+        return name.contains("dagger") || name.contains("knife");
+    }
+
+    public static boolean isSwordType(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        if (isDaggerType(stack)) return false;
+        return isDualWieldableWeapon(stack);
+    }
+
     public void equipWeapon(ItemStack mainWeapon) {
         this.setItemSlot(EquipmentSlot.MAINHAND, mainWeapon.copy());
 
-        ItemStack dualPartner = this.findDualWieldPartner(mainWeapon);
-        if (!dualPartner.isEmpty()) {
-            this.setItemSlot(EquipmentSlot.OFFHAND, dualPartner.copy());
+        boolean canDual = isDualWieldableWeapon(mainWeapon);
+        int chance = DoppelConfig.DUAL_WIELD_CHANCE_PERCENT.get();
+        boolean rollSuccess = (chance >= 100) || (chance > 0 && this.random.nextInt(100) < chance);
+
+        if (canDual && rollSuccess) {
+            ItemStack dualPartner = this.findDualWieldPartner(mainWeapon);
+            this.setItemSlot(EquipmentSlot.OFFHAND, dualPartner);
         } else {
+            // 二刀流不採用（確率外れ）、または両手武器等の場合は元のオフハンド（盾等）を装備
             this.setItemSlot(EquipmentSlot.OFFHAND, this.initialPlayerOffhand.copy());
         }
     }
 
     private ItemStack findDualWieldPartner(ItemStack main) {
-        if (main.isEmpty()) {
+        if (main.isEmpty() || !isDualWieldableWeapon(main)) {
             return ItemStack.EMPTY;
         }
 
-        CapabilityItem mainCap = EpicFightCapabilities.getItemStackCapabilityOr(main, null);
-        WeaponCategory mainCat = mainCap != null ? mainCap.getWeaponCategory() : null;
-        boolean isSword = (mainCat == CapabilityItem.WeaponCategories.SWORD) || (main.getItem() instanceof SwordItem);
-        boolean isDagger = (mainCat == CapabilityItem.WeaponCategories.DAGGER);
-
-        if (!isSword && !isDagger) {
-            return ItemStack.EMPTY;
-        }
+        boolean isDagger = isDaggerType(main);
+        boolean isSword = isSwordType(main);
 
         // 1. rememberedWeapons から、main と異なる同カテゴリ武器を探索
         List<ItemStack> candidates = new ArrayList<>();
@@ -463,39 +501,38 @@ public class YourselfEntity extends Monster {
             if (weapon.isEmpty() || ItemStack.isSameItemSameTags(weapon, main)) {
                 continue;
             }
-            CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(weapon, null);
-            WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
-            if (isDagger && cat == CapabilityItem.WeaponCategories.DAGGER) {
+            if (isDagger && isDaggerType(weapon)) {
                 candidates.add(weapon);
-            } else if (isSword && (cat == CapabilityItem.WeaponCategories.SWORD || weapon.getItem() instanceof SwordItem)) {
+            } else if (isSword && isSwordType(weapon)) {
                 candidates.add(weapon);
             }
         }
 
         if (!candidates.isEmpty()) {
-            return candidates.get(this.random.nextInt(candidates.size()));
+            return candidates.get(this.random.nextInt(candidates.size())).copy();
         }
 
         // 2. プレイヤーの初期オフハンドが同カテゴリ武器であれば、それをパートナーとして採用
         if (!this.initialPlayerOffhand.isEmpty()) {
-            CapabilityItem offCap = EpicFightCapabilities.getItemStackCapabilityOr(this.initialPlayerOffhand, null);
-            WeaponCategory offCat = offCap != null ? offCap.getWeaponCategory() : null;
-            if (isDagger && offCat == CapabilityItem.WeaponCategories.DAGGER) {
-                return this.initialPlayerOffhand;
-            } else if (isSword && (offCat == CapabilityItem.WeaponCategories.SWORD || this.initialPlayerOffhand.getItem() instanceof SwordItem)) {
-                return this.initialPlayerOffhand;
+            if (isDagger && isDaggerType(this.initialPlayerOffhand)) {
+                return this.initialPlayerOffhand.copy();
+            } else if (isSword && isSwordType(this.initialPlayerOffhand)) {
+                return this.initialPlayerOffhand.copy();
             }
         }
 
-        // 3. プレイヤーが同じ種類の武器を複数本所持していた場合、main をそのまま二刀流パートナーにする
-        if (isDagger && this.hasMultipleDaggers) {
-            return main;
-        }
-        if (isSword && this.hasMultipleSwords) {
-            return main;
-        }
+        // 3. 剣が1本だけの場合でも、メイン武器を複製して両手二刀流を成立させる！
+        return main.copy();
+    }
 
-        return ItemStack.EMPTY;
+    public void reapplyEquipment() {
+        ItemStack main = this.getMainHandItem();
+        if (main.isEmpty() && !this.rememberedWeapons.isEmpty()) {
+            main = this.rememberedWeapons.get(0);
+        }
+        if (!main.isEmpty()) {
+            this.equipWeapon(main);
+        }
     }
 
     private void switchWeapon() {

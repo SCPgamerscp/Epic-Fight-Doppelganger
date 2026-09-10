@@ -119,6 +119,7 @@ public final class ModEvents {
 
         spawnSoulPillar(level, summon.x, summon.y, summon.z);
         level.addFreshEntity(boss);
+        boss.reapplyEquipment();
         level.playSound(null, summon.x, summon.y, summon.z, SoundEvents.SOUL_ESCAPE, SoundSource.HOSTILE, 1.5F, 0.6F);
         level.playSound(null, summon.x, summon.y, summon.z, SoundEvents.WITHER_SPAWN, SoundSource.HOSTILE, 0.6F, 1.3F);
         level.playSound(null, summon.x, summon.y, summon.z, SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.HOSTILE, 0.8F, 1.0F);

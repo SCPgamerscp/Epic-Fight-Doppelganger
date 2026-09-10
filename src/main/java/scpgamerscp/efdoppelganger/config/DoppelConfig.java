@@ -19,6 +19,7 @@ public final class DoppelConfig {
     public static final ForgeConfigSpec.IntValue HEAL_COOLDOWN_TICKS;
     public static final ForgeConfigSpec.IntValue HEAL_AMOUNT_PERCENT;
     public static final ForgeConfigSpec.BooleanValue COPY_ARMOR;
+    public static final ForgeConfigSpec.IntValue DUAL_WIELD_CHANCE_PERCENT;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -44,6 +45,8 @@ public final class DoppelConfig {
         HEAL_AMOUNT_PERCENT = b.comment("Percent of max health restored per healing item use.")
                 .defineInRange("healAmountPercent", 15, 1, 100);
         COPY_ARMOR = b.comment("Copy the target player's armor on spawn.").define("copyArmor", true);
+        DUAL_WIELD_CHANCE_PERCENT = b.comment("Chance (0-100%) for the boss to adopt a dual-wielding stance when wielding one-handed swords or daggers.")
+                .defineInRange("dualWieldChancePercent", 50, 0, 100);
         b.pop();
 
         b.push("loot");
