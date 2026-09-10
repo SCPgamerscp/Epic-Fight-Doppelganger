@@ -318,7 +318,7 @@ public class YourselfEntity extends Monster {
         }
         this.bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
         int phase = this.getPhase();
-        if (phase != this.lastPhase || !this.hasEffect(MobEffects.DAMAGE_BOOST)) {
+        if (this.tickCount % 100 == 0 || phase != this.lastPhase || !this.hasEffect(MobEffects.DAMAGE_BOOST)) {
             this.lastPhase = phase;
             this.applyPhaseEffects(phase);
         }
@@ -429,7 +429,7 @@ public class YourselfEntity extends Monster {
 
     private void applyPhaseEffects(int phase) {
         this.removeEffect(MobEffects.DAMAGE_BOOST);
-        this.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 20 * 60 * 60, phase - 1, true, true));
+        this.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 20 * 60 * 60 * 1000, phase - 1, true, true));
     }
 
     public static boolean isDualWieldableWeapon(ItemStack stack) {
