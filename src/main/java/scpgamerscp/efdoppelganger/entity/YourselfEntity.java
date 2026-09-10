@@ -454,6 +454,7 @@ public class YourselfEntity extends Monster {
         WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
         if (cat == CapabilityItem.WeaponCategories.GREATSWORD
                 || cat == CapabilityItem.WeaponCategories.TACHI
+                || cat == CapabilityItem.WeaponCategories.UCHIGATANA
                 || cat == CapabilityItem.WeaponCategories.LONGSWORD
                 || cat == CapabilityItem.WeaponCategories.SPEAR
                 || cat == CapabilityItem.WeaponCategories.AXE) {
@@ -464,7 +465,8 @@ public class YourselfEntity extends Monster {
                 || name.contains("colossal") || name.contains("spear") || name.contains("polearm")
                 || name.contains("halberd") || name.contains("scythe") || name.contains("agony")
                 || name.contains("napoleon") || name.contains("cannon") || name.contains("staff")
-                || name.contains("wand") || name.contains("orbit") || name.contains("two_hand");
+                || name.contains("wand") || name.contains("orbit") || name.contains("two_hand")
+                || name.contains("katana") || name.contains("uchigatana");
     }
 
     public static boolean isDualWieldableWeapon(ItemStack stack) {
@@ -479,7 +481,7 @@ public class YourselfEntity extends Monster {
         }
         CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
         WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
-        if (cat == CapabilityItem.WeaponCategories.SWORD || cat == CapabilityItem.WeaponCategories.UCHIGATANA) {
+        if (cat == CapabilityItem.WeaponCategories.SWORD) {
             return true;
         }
         if (stack.getItem() instanceof SwordItem) {
