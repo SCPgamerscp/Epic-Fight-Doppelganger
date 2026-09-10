@@ -250,6 +250,9 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
 
         CombatBehaviors.Builder<HumanoidMobPatch<?>> builder = CombatBehaviors.builder();
         double reach = Math.max(2.6D, weaponCap.getReach());
+        if (YourselfEntity.isGunType(mainhand)) {
+            reach = Math.max(12.0D, reach);
+        }
 
         // 1. 中距離からの単発強襲必殺技シリーズ
         if (!finishers.isEmpty()) {
@@ -269,6 +272,8 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
         int surpriseCooldown = (phase == 3) ? 20 : (phase == 2 ? 30 : 45);
 
         ItemStack offhand = entity.getOffhandItem();
+        boolean isDualFist = YourselfEntity.isFistType(mainhand) && YourselfEntity.isFistType(offhand);
+        boolean isDualGun = YourselfEntity.isGunType(mainhand) && YourselfEntity.isGunType(offhand);
         boolean isDualDagger = YourselfEntity.isDaggerType(mainhand) && YourselfEntity.isDaggerType(offhand);
         boolean isDualSword = YourselfEntity.isSwordType(mainhand) && YourselfEntity.isSwordType(offhand);
 
@@ -279,6 +284,29 @@ public class YourselfPatch extends HumanoidMobPatch<YourselfEntity> {
         List<AnimationAccessor<? extends AttackAnimation>> addonSpecials = new ArrayList<>();
         extractWomWeaponAnimations(mainhand, addonDash, addonSpecials);
         AnimationSanitizer.sanitizeAccessors(addonSpecials);
+
+        if (isDualGun) {
+            // 二丁拳銃（エンダーブラスター等）: 動的アドオン射撃コンボ + レーザー必殺技
+            CombatBehaviors.Builder<HumanoidMobPatch<?>> gunBehaviors = tryBuildDynamicAddonBehaviors(cap, mainhand, entity);
+            if (gunBehaviors != null) {
+                return gunBehaviors;
+            }
+        }
+
+        if (isDualFist) {
+            // 格闘両手スタイル（グローブ、ジャバウォッキー等）: 左右パンチラッシュ + アドオン必殺技
+            List<AnimationAccessor<? extends AttackAnimation>> fFinishers = new ArrayList<>();
+            if (!addonSpecials.isEmpty()) {
+                fFinishers.addAll(addonSpecials);
+            }
+            AnimationAccessor<? extends AttackAnimation> fDash = !addonDash.isEmpty() ? addonDash.get(0) : null;
+            builder.newBehaviorSeries(createFullComboSeries(
+                    fDash,
+                    List.of(Animations.FIST_AUTO1, Animations.FIST_AUTO2, Animations.FIST_AUTO3),
+                    fFinishers,
+                    2.2D));
+            return builder;
+        }
 
         if (isDualDagger) {
             // 短剣二刀流: 4連撃高速乱舞 + フィニッシャー

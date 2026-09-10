@@ -432,26 +432,67 @@ public class YourselfEntity extends Monster {
         this.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 20 * 60 * 60 * 1000, phase - 1, true, true));
     }
 
+    public static boolean isFistType(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
+        WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+        if (cat == CapabilityItem.WeaponCategories.FIST) return true;
+        String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().toLowerCase();
+        return name.contains("glove") || name.contains("gauntlet") || name.contains("knuckle")
+                || name.contains("fist") || name.contains("claw") || name.contains("jabberwocky");
+    }
+
+    public static boolean isGunType(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().toLowerCase();
+        return name.contains("blaster") || name.contains("gun") || name.contains("pistol") || name.contains("ender_blaster");
+    }
+
+    public static boolean isTwoHandedWeapon(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
+        WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+        if (cat == CapabilityItem.WeaponCategories.GREATSWORD
+                || cat == CapabilityItem.WeaponCategories.TACHI
+                || cat == CapabilityItem.WeaponCategories.LONGSWORD
+                || cat == CapabilityItem.WeaponCategories.SPEAR
+                || cat == CapabilityItem.WeaponCategories.AXE) {
+            return true;
+        }
+        String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().toLowerCase();
+        return name.contains("great") || name.contains("long") || name.contains("heavy")
+                || name.contains("colossal") || name.contains("spear") || name.contains("polearm")
+                || name.contains("halberd") || name.contains("scythe") || name.contains("agony")
+                || name.contains("napoleon") || name.contains("cannon") || name.contains("staff")
+                || name.contains("wand") || name.contains("orbit") || name.contains("two_hand");
+    }
+
     public static boolean isDualWieldableWeapon(ItemStack stack) {
         if (stack.isEmpty()) {
             return false;
         }
-        CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
-        WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
-        if (cat == CapabilityItem.WeaponCategories.SWORD || cat == CapabilityItem.WeaponCategories.DAGGER || cat == CapabilityItem.WeaponCategories.UCHIGATANA) {
+        if (isTwoHandedWeapon(stack)) {
+            return false;
+        }
+        if (isFistType(stack) || isGunType(stack) || isDaggerType(stack)) {
             return true;
         }
-        if (cat == CapabilityItem.WeaponCategories.GREATSWORD || cat == CapabilityItem.WeaponCategories.TACHI
-                || cat == CapabilityItem.WeaponCategories.LONGSWORD || cat == CapabilityItem.WeaponCategories.SPEAR
-                || cat == CapabilityItem.WeaponCategories.AXE) {
-            return false;
+        CapabilityItem cap = EpicFightCapabilities.getItemStackCapabilityOr(stack, null);
+        WeaponCategory cat = cap != null ? cap.getWeaponCategory() : null;
+        if (cat == CapabilityItem.WeaponCategories.SWORD || cat == CapabilityItem.WeaponCategories.UCHIGATANA) {
+            return true;
         }
         if (stack.getItem() instanceof SwordItem) {
             return true;
         }
         String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath().toLowerCase();
-        if (name.contains("sword") || name.contains("dagger") || name.contains("blade") || name.contains("knife")) {
-            return !name.contains("great") && !name.contains("long") && !name.contains("heavy") && !name.contains("colossal");
+        if (name.contains("sword") || name.contains("blade") || name.contains("dagger") || name.contains("knife")) {
+            return true;
+        }
+        net.minecraft.resources.ResourceLocation id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (id != null && id.getNamespace().equals("wom")) {
+            // WOMの片手武器（Nova, Solar, Moonless, Ruine, Satsujin, Antitheus, Blackstar, Gesetz, Herrscher等）
+            return true;
         }
         return false;
     }
@@ -467,7 +508,7 @@ public class YourselfEntity extends Monster {
 
     public static boolean isSwordType(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        if (isDaggerType(stack)) return false;
+        if (isFistType(stack) || isGunType(stack) || isDaggerType(stack)) return false;
         return isDualWieldableWeapon(stack);
     }
 
@@ -492,6 +533,8 @@ public class YourselfEntity extends Monster {
             return ItemStack.EMPTY;
         }
 
+        boolean isFist = isFistType(main);
+        boolean isGun = isGunType(main);
         boolean isDagger = isDaggerType(main);
         boolean isSword = isSwordType(main);
 
@@ -501,7 +544,11 @@ public class YourselfEntity extends Monster {
             if (weapon.isEmpty() || ItemStack.isSameItemSameTags(weapon, main)) {
                 continue;
             }
-            if (isDagger && isDaggerType(weapon)) {
+            if (isFist && isFistType(weapon)) {
+                candidates.add(weapon);
+            } else if (isGun && isGunType(weapon)) {
+                candidates.add(weapon);
+            } else if (isDagger && isDaggerType(weapon)) {
                 candidates.add(weapon);
             } else if (isSword && isSwordType(weapon)) {
                 candidates.add(weapon);
@@ -514,14 +561,18 @@ public class YourselfEntity extends Monster {
 
         // 2. プレイヤーの初期オフハンドが同カテゴリ武器であれば、それをパートナーとして採用
         if (!this.initialPlayerOffhand.isEmpty()) {
-            if (isDagger && isDaggerType(this.initialPlayerOffhand)) {
+            if (isFist && isFistType(this.initialPlayerOffhand)) {
+                return this.initialPlayerOffhand.copy();
+            } else if (isGun && isGunType(this.initialPlayerOffhand)) {
+                return this.initialPlayerOffhand.copy();
+            } else if (isDagger && isDaggerType(this.initialPlayerOffhand)) {
                 return this.initialPlayerOffhand.copy();
             } else if (isSword && isSwordType(this.initialPlayerOffhand)) {
                 return this.initialPlayerOffhand.copy();
             }
         }
 
-        // 3. 剣が1本だけの場合でも、メイン武器を複製して両手二刀流を成立させる！
+        // 3. 武器が1本だけの場合でも、メイン武器を複製して二刀流/二丁拳銃/両手グローブを成立させる！
         return main.copy();
     }
 
